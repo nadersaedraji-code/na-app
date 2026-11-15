@@ -10,13 +10,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '2.1.1';
+const APP_VERSION = '2.1.2';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '2.1.2', at: '15 Nov 2026', notes: "Check for updates now performs a true hard refresh." },
   { v: '2.1.1', at: '15 Nov 2026', notes: "The streak gets a face: a big number, the week, your best." },
   { v: '2.1.0', at: '15 Nov 2026', notes: "Streaks: five prayers on time, day after day." },
   { v: '2.0.0', at: '15 Nov 2026', notes: "A weekly recap that reads your week back to you — prayers, tasks, mood, the best day." },
@@ -2757,12 +2758,16 @@ const ACTIONS = {
 
   about: () => sheetAbout(),
   'check-updates': async () => {
-    toast('Checking for a new build…');
+    toast('Forcing the newest build…');
     try {
       const reg = await navigator.serviceWorker?.getRegistration();
       await reg?.update();
     } catch { /* ignore */ }
-    setTimeout(() => location.reload(), 1000);
+    setTimeout(() => {
+      const url = new URL(location.href);
+      url.searchParams.set('fresh', String(Date.now()));
+      location.replace(url.toString());
+    }, 700);
   },
   install: () => sheetInstall(),
   geolocate: () => {
@@ -3124,5 +3129,18 @@ function registerSW() {
 }
 
 /* ---------- go ---------- */
-if ('serviceWorker' in navigator && location.protocol !== 'file:') registerSW();
-boot();
+async function main() {
+  // ?fresh — drop every cached copy of the *code*, keep every byte of data.
+  if (new URLSearchParams(location.search).has('fresh')) {
+    try {
+      for (const reg of await navigator.serviceWorker.getRegistrations()) await reg.unregister();
+      for (const key of await caches.keys()) await caches.delete(key);
+    } catch { /* ignore */ }
+    history.replaceState(null, '', location.pathname + location.hash);
+  }
+
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') registerSW();
+  await boot();
+}
+
+main();

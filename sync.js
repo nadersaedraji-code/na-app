@@ -198,7 +198,7 @@ function buildPayload() {
 }
 
 export async function flush() {
-  if (!cfg || busy) return;
+  if (!cfg || busy || state === 'gone') return;
   const payload = buildPayload();
   if (!payload) return;
 
@@ -249,7 +249,14 @@ export async function pull() {
     return data;
   } catch (err) {
     console.warn('pull failed', err.message);
-    setState('error');
+    if (String(err.message).includes('400')) {
+      // The space no longer exists on the server. Stop knocking.
+      setState('gone');
+      clearInterval(pollTimer);
+      pollTimer = null;
+    } else {
+      setState('error');
+    }
     return null;
   }
 }

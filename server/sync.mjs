@@ -73,6 +73,13 @@ function coupleFor(key) {
   return state.couples[key];
 }
 
+/* Reads and writes never create a space. Only a join does — so a phone
+   holding a code for a space that was reset cannot resurrect it. */
+function findCouple(key) {
+  if (!key || key.length < 20) return null;
+  return state.couples[key] || null;
+}
+
 const upsert = (table, row) => {
   const list = state[table];
   const i = list.findIndex((r) => r.id === row.id);
@@ -98,7 +105,7 @@ function join(body) {
 }
 
 function pull(body) {
-  const couple = coupleFor(body.p_key);
+  const couple = findCouple(body.p_key);
   if (!couple) throw new Error('invalid key');
   const since = new Date(body.p_since || 0).getTime();
 
@@ -119,7 +126,7 @@ function pull(body) {
 }
 
 function push(body) {
-  const couple = coupleFor(body.p_key);
+  const couple = findCouple(body.p_key);
   if (!couple) throw new Error('invalid key');
   const clock = new Date().toISOString();
   const data = body.p_data || {};

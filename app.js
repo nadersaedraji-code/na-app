@@ -10,9 +10,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '1.2.1';
+const APP_VERSION = '1.3.0';
 const LOCALE = 'en-GB';
+
+/* Sample history is off. A new space starts genuinely empty — no
+   imaginary prayers from an imaginary partner. */
+const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '1.3.0', at: '15 Nov 2026', notes: "Starts empty — no sample days, no imaginary prayers." },
   { v: '1.2.1', at: '15 Nov 2026', notes: "Resetting now forgets everything, including the pairing code." },
   { v: '1.2.0', at: '15 Nov 2026', notes: "A home of your own, and a softer look throughout." },
   { v: '1.1.4', at: '15 Nov 2026', notes: "Reset clears the whole space, as it should." },
@@ -432,10 +437,12 @@ async function completeOnboarding(solo) {
   const firstSettings = { ...DEFAULTS, ...loc, notif: { ...DEFAULTS.notif } };
   await db.put('meta', { key: 'settings', value: firstSettings });
   await db.saveMeta('app', { viewerId: meId, schemaVersion: db.SCHEMA_VERSION });
-  try {
-    await seedSample(members);
-  } catch (err) {
-    console.warn('Sample history could not be written', err);
+  if (SEED_SAMPLE) {
+    try {
+      await seedSample(members);
+    } catch (err) {
+      console.warn('Sample history could not be written', err);
+    }
   }
 
   S.members = members;
@@ -1639,6 +1646,7 @@ function sheetJoin() {
 function syncLine() {
   if (!sync.isOn()) return 'Share prayers and plans live';
   const s = S.syncState;
+  if (s === 'gone') return 'Fresh start — reset this phone';
   if (s === 'error') return 'Offline — will retry';
   if (s === 'syncing') return 'Syncing…';
   if (s === 'live') return 'Synced · just now';

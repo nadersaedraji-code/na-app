@@ -10,13 +10,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '2.3.0';
+const APP_VERSION = '2.4.0';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '2.4.0', at: '15 Nov 2026', notes: "Reminders per prayer, with an urgent warning before the window closes." },
   { v: '2.3.0', at: '15 Nov 2026', notes: "The Qibla dial carries the Kaaba at its true direction." },
   { v: '2.2.2', at: '15 Nov 2026', notes: "The compass follows one sensor stream and paints once per frame." },
   { v: '2.2.1', at: '15 Nov 2026', notes: "Qibla renders correctly from the first paint, and assets are versioned." },
@@ -101,7 +102,15 @@ const DEFAULTS = {
   preset: null,
   method: 'MWL',
   theme: 'light',
-  notif: { prayer: true, followup: true, review: true, partner: true },
+  notif: {
+    prayer: true,
+    followup: true,
+    review: true,
+    partner: true,
+    urgency: true,
+    lead: 20,
+    prayers: { fajr: true, dhuhr: true, asr: true, maghrib: true, isha: true },
+  },
   silent: [22, 7],
 };
 
@@ -352,6 +361,7 @@ async function boot() {
     renderOnboarding();
   } else {
     showApp();
+    startPrayerWatch();
     if (sync.isOn()) {
       sync.startPolling();
       sync.pull();
@@ -1330,6 +1340,115 @@ function viewHome() {
   `;
 }
 /* ============================================================
+   Prayer reminders — per prayer, with an urgent warning
+   ============================================================ */
+const NOTIF_KEY = 'na:notified';
+
+function notifiedSet() {
+  try { return new Set(JSON.parse(localStorage.getItem(NOTIF_KEY) || '[]')); } catch { return new Set(); }
+}
+
+function markNotified(key) {
+  const set = notifiedSet();
+  set.add(key);
+  const today = dayKey();
+  const keep = [...set].filter((k) => k.startsWith(today));
+  try { localStorage.setItem(NOTIF_KEY, JSON.stringify(keep)); } catch { /* ignore */ }
+}
+
+function once(key, fn) {
+  if (notifiedSet().has(key)) return;
+  markNotified(key);
+  fn();
+}
+
+async function notify(title, body, tag) {
+  const opts = {
+    body,
+    tag,
+    icon: './icons/icon-192.png',
+    badge: './icons/icon-192.png',
+    vibrate: [90, 50, 90],
+  };
+  if (!('Notification' in window) || Notification.permission !== 'granted') {
+    toast(`${title} — ${body}`, 5000);
+    return;
+  }
+  try {
+    const reg = await navigator.serviceWorker?.getRegistration();
+    if (reg?.showNotification) {
+      await reg.showNotification(title, opts);
+      return;
+    }
+    new Notification(title, opts);
+  } catch {
+    toast(`${title} — ${body}`, 5000);
+  }
+}
+
+function checkPrayerNotifications() {
+  if (!S.members.length) return;
+  const n = S.settings.notif || {};
+  if (!n.prayer) return;
+
+  const prefs = n.prayers || {};
+  const who = me();
+  if (!who) return;
+
+  const day = dayKey();
+  const t = times(day);
+  const now = new Date();
+  const lead = n.lead || 20;
+
+  for (const k of PRAYER_ORDER) {
+    if (prefs[k] === false) continue;
+    if (getPrayer(who.id, day, k)) continue;
+
+    const start = t[k];
+    const end = t.onTimeEnd[k];
+    if (now < start || now >= end) continue; // only the window you are inside
+
+    const mins = Math.round((end - now) / 60000);
+    const urgentAt = new Date(end.getTime() - lead * 60000);
+
+    if (n.urgency !== false && now >= urgentAt) {
+      once(`${day}|${k}|urgent`, () =>
+        notify(`${PMETA[k].name} ends in ${mins} min`, 'Still unlogged — pray before the window closes.', `urgent-${k}`));
+    } else {
+      once(`${day}|${k}|start`, () =>
+        notify(`${PMETA[k].name} · ${fmtTime(start)}`, `The window closes at ${fmtTime(end)}.`, `start-${k}`));
+    }
+  }
+}
+
+let notifTimer = null;
+function startPrayerWatch() {
+  clearInterval(notifTimer);
+  const run = () => {
+    try { checkPrayerNotifications(); } catch (err) { console.warn('reminder check failed', err); }
+  };
+  run();
+  notifTimer = setInterval(run, 45000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') run();
+  });
+}
+
+/** The prayer whose on-time window closes soonest, if still unlogged. */
+function closingSoon(memberId) {
+  const t = times(dayKey());
+  const now = new Date();
+  for (const k of PRAYER_ORDER) {
+    if (now < t[k]) continue;
+    const mins = (t.onTimeEnd[k] - now) / 60000;
+    if (mins > 0 && mins <= 30 && !getPrayer(memberId, dayKey(), k)) {
+      return { k, mins: Math.round(mins) };
+    }
+  }
+  return null;
+}
+
+/* ============================================================
    View — Prayer
    ============================================================ */
 function viewPrayer() {
@@ -1342,6 +1461,7 @@ function viewPrayer() {
   const onTime = recs.filter((x) => x.rec && x.rec.status !== 'missed').length;
   const np = nextPrayer(t);
   const streak = streakOf(who.id);
+  const soon = closingSoon(who.id);
   const C = 2 * Math.PI * 52;
 
   const ring = `
@@ -1416,6 +1536,11 @@ function viewPrayer() {
       </div>
       <div class="head-avatar" style="box-shadow:0 0 0 3px ${who.color}30">${who.avatar}</div>
     </header>
+
+    ${soon ? `<button class="urgent" data-act="log" data-key="${soon.k}">
+      <span class="dot"></span>
+      <span>${PMETA[soon.k].name} ends in ${soon.mins} min — not logged yet</span>
+    </button>` : ''}
 
     <div class="card hero">
       ${ring}
@@ -2046,8 +2171,7 @@ function viewSettings() {
     </div>
 
     <div class="group">
-      ${toggle('prayer', 'Prayer reminder', 'A quiet nudge at each adhan')}
-      ${toggle('followup', 'Still not logged', 'One follow-up, 45 minutes later')}
+      ${row('prayer-notifs', I.bell, 'Prayer reminders', prayerNotifLine())}
       ${toggle('review', 'Evening review', 'A prompt to close the day')}
       ${toggle('partner', 'From your partner', 'Reactions and notes')}
     </div>
@@ -2566,8 +2690,42 @@ function sheetJoin() {
   `, (sheet) => sheet.querySelector('input')?.focus());
 }
 
-function syncLine() {
-  if (!sync.isOn()) return 'Share prayers and plans live';
+function prayerNotifLine() {
+  const n = S.settings.notif || {};
+  const prefs = n.prayers || {};
+  const on = PRAYER_ORDER.filter((k) => prefs[k] !== false).length;
+  return `${on} of 5 on · warning ${n.lead || 20} min before`;
+}
+
+function sheetPrayerNotifs() {
+  const n = S.settings.notif || {};
+  const prefs = n.prayers || {};
+  const t = times(dayKey());
+
+  openSheet(`
+    <div class="grip"></div>
+    <h3>Prayer reminders</h3>
+    <p class="sheet-sub">Each prayer speaks for itself — a nudge when its window opens, and an urgent one before it closes.</p>
+    <div class="sheet-list">
+      ${PRAYER_ORDER.map((k) => `
+        <button class="sheet-opt" data-act="toggle-prayer-notif" data-key="${k}">
+          <span class="lbl">${PMETA[k].name}<span class="sub">${fmtTime(t[k])} – ${fmtTime(t.onTimeEnd[k])}</span></span>
+          <span class="switch" role="switch" aria-checked="${prefs[k] !== false}"></span>
+        </button>`).join('')}
+      <button class="sheet-opt" data-act="toggle-urgency">
+        <span class="lbl">Urgent warning<span class="sub">If it's still unlogged near the end</span></span>
+        <span class="switch" role="switch" aria-checked="${n.urgency !== false}"></span>
+      </button>
+      <button class="sheet-opt" data-act="lead-cycle">
+        <span class="lbl">Warn me before<span class="sub">Minutes before the window closes</span></span>
+        <span class="v" style="font-size:13px;color:var(--ink-3)">${n.lead || 20} min</span>
+      </button>
+    </div>
+    <p class="q-note">Alerts arrive while the app is open or in the background. Alerts with the app fully closed need the cloud switch-on.</p>
+  `);
+}
+
+function syncLine() {  if (!sync.isOn()) return 'Share prayers and plans live';
   const s = S.syncState;
   if (s === 'gone') return 'Fresh start — reset this phone';
   if (s === 'error') return 'Offline — will retry';
@@ -2720,6 +2878,42 @@ const ACTIONS = {
   'goal-menu': (el) => sheetGoal(el.dataset.id),
 
   qibla: () => sheetQibla(),
+
+  'prayer-notifs': () => sheetPrayerNotifs(),
+
+  'toggle-prayer-notif': async (el) => {
+    const key = el.dataset.key;
+    const prefs = { ...(S.settings.notif.prayers || {}) };
+    const on = prefs[key] === false; // currently off -> turning on
+    prefs[key] = on;
+    S.settings.notif = { ...S.settings.notif, prayers: prefs };
+    await db.put('meta', { key: 'settings', value: S.settings });
+    el.querySelector('.switch')?.setAttribute('aria-checked', String(on));
+    if (on && 'Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+    haptic(6);
+  },
+
+  'toggle-urgency': async (el) => {
+    const n = { ...S.settings.notif };
+    n.urgency = n.urgency === false;
+    S.settings.notif = n;
+    await db.put('meta', { key: 'settings', value: S.settings });
+    el.querySelector('.switch')?.setAttribute('aria-checked', String(n.urgency !== false));
+    haptic(6);
+  },
+
+  'lead-cycle': async (el) => {
+    const steps = [15, 20, 30, 45];
+    const cur = S.settings.notif.lead || 20;
+    const next = steps[(steps.indexOf(cur) + 1) % steps.length];
+    S.settings.notif = { ...S.settings.notif, lead: next };
+    await db.put('meta', { key: 'settings', value: S.settings });
+    const v = el.querySelector('.v');
+    if (v) v.textContent = `${next} min`;
+    haptic(6);
+  },
 
   'qibla-permission': async () => {
     try {

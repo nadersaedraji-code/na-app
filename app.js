@@ -10,13 +10,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '1.7.0';
+const APP_VERSION = '1.8.0';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '1.8.0', at: '15 Nov 2026', notes: "Objectives with progress bars, a two-tier shelf, and a calmer settings list." },
   { v: '1.7.0', at: '15 Nov 2026', notes: "Prayer times from Masjid Cluj-Napoca, and tasks that can be half-done." },
   { v: '1.6.1', at: '15 Nov 2026', notes: "Days before your start date can't be opened — no empty history to misread." },
   { v: '1.6.0', at: '15 Nov 2026', notes: "Partner stats, a trend graph, optional task times, and a verse to open the day." },
@@ -177,11 +178,13 @@ const S = {
   plan: [],
   reviews: [],
   reactions: [],
+  goals: [],
   settings: { ...DEFAULTS },
   viewerId: null,
   viewingAs: null,
   view: 'home',
   planTab: 'mine',
+  goalTab: 'mine',
   calMonth: null,
   scroll: {},
   justLogged: null,
@@ -371,6 +374,7 @@ async function loadState() {
   S.plan = d.plan || [];
   S.reviews = d.reviews || [];
   S.reactions = d.reactions || [];
+  S.goals = d.goals || [];
   S.settings = { ...DEFAULTS, ...(S.meta.settings?.value || {}) };
   S.settings.notif = { ...DEFAULTS.notif, ...(S.settings.notif || {}) };
   S.viewerId = d.meta?.app?.viewerId || S.members[0]?.id || null;
@@ -638,10 +642,36 @@ async function seedSample(members) {
 /* ============================================================
    Render
    ============================================================ */
-const TABS = [
-  { id: 'home', label: 'Home', icon: '<path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4.4v-6H9.4v6H5a1 1 0 0 1-1-1Z"/>' },
+/* One line-icon language for the whole settings list. */
+const icon = (paths) =>
+  `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
+
+const I = {
+  user: icon('<circle cx="12" cy="8.2" r="3.4"/><path d="M4.8 20c1.1-3.4 3.9-5.2 7.2-5.2s6.1 1.8 7.2 5.2"/>'),
+  palette: icon('<path d="M12 3a9 9 0 1 0 0 18h1.4a2 2 0 0 0 0-4h-.8a1.6 1.6 0 0 1 0-3.2H17A4 4 0 0 0 21 9.8C21 6 17 3 12 3Z"/><circle cx="8" cy="9.4" r=".9" fill="currentColor" stroke="none"/><circle cx="11.4" cy="6.8" r=".9" fill="currentColor" stroke="none"/><circle cx="15.2" cy="7.6" r=".9" fill="currentColor" stroke="none"/>'),
+  heart: icon('<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 1 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/>'),
+  link: icon('<path d="M10.2 13.8a4.6 4.6 0 0 0 6.5 0l2.1-2.1a4.6 4.6 0 1 0-6.5-6.5l-1 1"/><path d="M13.8 10.2a4.6 4.6 0 0 0-6.5 0l-2.1 2.1a4.6 4.6 0 1 0 6.5 6.5l1-1"/>'),
+  eye: icon('<path d="M2.8 12S6.5 5.8 12 5.8 21.2 12 21.2 12 17.5 18.2 12 18.2 2.8 12 2.8 12Z"/><circle cx="12" cy="12" r="2.7"/>'),
+  mosque: icon('<path d="M4 20v-8.4a8 8 0 0 1 16 0V20"/><path d="M12 3.2v1.6"/><path d="M9.6 20v-3.6a2.4 2.4 0 0 1 4.8 0V20"/><path d="M3 20h18"/>'),
+  sliders: icon('<path d="M4 7h4M12 7h8M4 17h10M18 17h2"/><circle cx="10" cy="7" r="2"/><circle cx="16" cy="17" r="2"/>'),
+  pin: icon('<path d="M12 21s6.8-5.6 6.8-11A6.8 6.8 0 1 0 5.2 10c0 5.4 6.8 11 6.8 11Z"/><circle cx="12" cy="10" r="2.5"/>'),
+  clock: icon('<circle cx="12" cy="12" r="8.4"/><path d="M12 7.4V12l3 1.8"/>'),
+  bell: icon('<path d="M18 15.2V10a6 6 0 1 0-12 0v5.2L4.6 18h14.8Z"/><path d="M10 20.6a2 2 0 0 0 4 0"/>'),
+  calendar: icon('<rect x="3.6" y="5.2" width="16.8" height="15" rx="3"/><path d="M8 3.2v4M16 3.2v4M3.6 10.2h16.8"/>'),
+  refresh: icon('<path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4.4v4h-4"/>'),
+  info: icon('<circle cx="12" cy="12" r="8.4"/><path d="M12 11.2v5.2M12 7.9v.6"/>'),
+  phone: icon('<rect x="6.4" y="2.6" width="11.2" height="18.8" rx="3"/><path d="M10.6 18.6h2.8"/>'),
+  download: icon('<path d="M12 4.2v10.6"/><path d="m7.8 10.6 4.2 4.2 4.2-4.2"/><path d="M4.8 19.6h14.4"/>'),
+  upload: icon('<path d="M12 15.4V4.8"/><path d="m7.8 9 4.2-4.2L16.2 9"/><path d="M4.8 19.6h14.4"/>'),
+  flask: icon('<path d="M9.2 3h5.6M10.2 3v6.2L5.6 18a2 2 0 0 0 1.7 3h9.4a2 2 0 0 0 1.7-3l-4.6-8.8V3"/>'),
+  trash: icon('<path d="M4.2 7h15.6M9.6 7V4.4h4.8V7M6.6 7l.9 13h9l.9-13"/>'),
+  check: icon('<path d="M20 6 9 17l-5-5"/>'),
+};
+
+const TABS = [  { id: 'home', label: 'Home', icon: '<path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4.4v-6H9.4v6H5a1 1 0 0 1-1-1Z"/>' },
   { id: 'prayer', label: 'Prayer', icon: '<path d="M21 12.8A8.6 8.6 0 1 1 11.2 3a6.8 6.8 0 0 0 9.8 9.8Z"/>' },
   { id: 'plan', label: 'Plan', icon: '<path d="M9 6h11M9 12h11M9 18h11"/><path d="M4.5 6h.01M4.5 12h.01M4.5 18h.01"/>' },
+  { id: 'goals', label: 'Goals', icon: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.6"/>' },
   { id: 'review', label: 'Review', icon: '<path d="M12 20h9"/><path d="M16.6 3.4a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>' },
   { id: 'us', label: 'Us', icon: '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 1 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/>' },
 ];
@@ -970,6 +1000,100 @@ function taskRow(t, editable) {
         ? `<button class="icon-btn" data-act="task-menu" data-id="${t.id}" aria-label="More actions">⋯</button>`
         : `<button class="icon-btn" data-act="react-plan" data-id="${t.id}" aria-label="React">♥</button>`}
     </div>`;
+}
+
+/* ============================================================
+   View — Goals
+   ============================================================ */
+const goalsFor = (memberId) =>
+  S.goals.filter((g) => g.memberId === memberId).sort((a, b) => a.createdAt - b.createdAt);
+
+async function saveGoal(g) {
+  const i = S.goals.findIndex((x) => x.id === g.id);
+  if (i >= 0) S.goals[i] = g;
+  else S.goals.push(g);
+  await db.put('goals', g);
+  return g;
+}
+
+function goalCard(g, editable) {
+  const pct = Math.max(0, Math.min(100, Math.round(g.progress || 0)));
+  return `
+    <div class="goal">
+      <div class="goal-top">
+        <span class="goal-title">${esc(g.title)}</span>
+        <span class="goal-pct num">${pct}%</span>
+      </div>
+      ${editable
+        ? `<input class="goal-bar" type="range" min="0" max="100" step="5" value="${pct}" data-goal="${g.id}" style="--p:${pct}" aria-label="${esc(g.title)} progress">`
+        : `<div class="goal-track"><i style="width:${pct}%;background:var(--accent)"></i></div>`}
+    </div>`;
+}
+
+function goalSection(title, hint, list, scope, editable) {
+  return `
+    <div class="section-title">${title} <span class="link">${list.length}</span></div>
+    <div class="goals">
+      ${list.length
+        ? list.map((g) => goalCard(g, editable)).join('')
+        : `<div class="empty small"><b>Nothing yet</b>${hint}</div>`}
+    </div>
+    ${editable
+      ? `<form class="add-goal" data-form="add-goal" data-scope="${scope}">
+          <input name="title" placeholder="${scope === 'main' ? 'Add a main objective…' : 'Add a secondary one…'}" maxlength="90" autocomplete="off">
+          <button type="submit" aria-label="Add objective">+</button>
+        </form>`
+      : ''}
+  `;
+}
+
+function goalDoneSection(done, editable) {
+  return `
+    <div class="section-title">Accomplished <span class="link">${done.length}</span></div>
+    <div class="goals">
+      ${done.length
+        ? done.map((g) => `
+          <div class="goal done">
+            <span class="goal-tick">✓</span>
+            <div class="goal-done-body">
+              <div class="goal-title">${esc(g.title)}</div>
+              <div class="goal-meta">${g.scope === 'main' ? 'Main' : 'Secondary'} · ${new Date(g.completedAt).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' })}</div>
+            </div>
+            ${editable ? `<button class="icon-btn" data-act="restore-goal" data-id="${g.id}" aria-label="Put it back">↩</button>` : ''}
+          </div>`).join('')
+        : `<div class="empty small"><b>An empty shelf</b>Objectives you reach will rest here.</div>`}
+    </div>
+  `;
+}
+
+function viewGoals() {
+  const who = actor();
+  const p = other(who);
+  const shown = S.goalTab === 'theirs' && p ? p : who;
+  const editable = shown.id === who.id;
+  const list = goalsFor(shown.id);
+  const main = list.filter((g) => !g.completedAt && g.scope === 'main');
+  const secondary = list.filter((g) => !g.completedAt && g.scope === 'secondary');
+  const done = list.filter((g) => g.completedAt).sort((a, b) => b.completedAt - a.completedAt);
+
+  return `
+    <header class="head">
+      <div>
+        <div class="eyebrow">The long game</div>
+        <h1>Objectives</h1>
+        <div class="sub">${done.length ? `${done.length} accomplished` : 'One bar at a time.'}</div>
+      </div>
+    </header>
+
+    ${p ? `<div class="seg" role="tablist">
+      <button role="tab" aria-selected="${S.goalTab !== 'theirs'}" data-act="goal-tab" data-tab="mine">Mine</button>
+      <button role="tab" aria-selected="${S.goalTab === 'theirs'}" data-act="goal-tab" data-tab="theirs">${esc(p.name)}</button>
+    </div>` : ''}
+
+    ${goalSection('Main objectives', 'The ones that matter most.', main, 'main', editable)}
+    ${goalSection('Secondary objectives', 'Nice to have — not owed to anyone.', secondary, 'secondary', editable)}
+    ${goalDoneSection(done, editable)}
+  `;
 }
 
 /* ============================================================
@@ -1344,7 +1468,7 @@ function viewSettings() {
 
   const toggle = (key, title, desc) => `
     <button class="row" data-act="toggle" data-key="${key}">
-      <span class="ico">🔔</span>
+      <span class="ico">${I.bell}</span>
       <span class="txt"><span class="t">${title}</span><span class="d" style="display:block">${desc}</span></span>
       <span class="switch" role="switch" aria-checked="${!!S.settings.notif[key]}"></span>
     </button>`;
@@ -1359,22 +1483,22 @@ function viewSettings() {
     </header>
 
     <div class="group">
-      ${row('edit-name', '👤', 'Your name', esc(who?.name || ''), '')}
-      ${row('edit-color', '🎨', 'Your colour', 'Used across the app', '', `style="--dot:${who?.color}"`)}
+      ${row('edit-name', I.user, 'Your name', esc(who?.name || ''), '')}
+      ${row('edit-color', I.palette, 'Your colour', 'Used across the app', '', `style="--dot:${who?.color}"`)}
       ${row('edit-avatar', who?.avatar || '🌙', 'Your avatar', '', '')}
     </div>
 
     <div class="group">
-      ${p ? row('edit-partner', '💞', 'Partner', `${esc(p.name)} · joined ${new Date(p.joinedAt).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' })}`) : ''}
-      ${row('sync', sync.isOn() ? '🔗' : '📡', sync.isOn() ? 'Two phones connected' : 'Connect the other phone', syncLine())}
-      ${p ? row('preview', isPreview() ? '↩' : '👁', isPreview() ? 'Exit partner view' : 'Preview as ' + esc(p.name), 'See the app from their side') : ''}
+      ${p ? row('edit-partner', I.heart, 'Partner', `${esc(p.name)} · joined ${new Date(p.joinedAt).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' })}`) : ''}
+      ${row('sync', I.link, sync.isOn() ? 'Two phones connected' : 'Connect the other phone', syncLine())}
+      ${p ? row('preview', I.eye, isPreview() ? 'Exit partner view' : 'Preview as ' + esc(p.name), 'See the app from their side') : ''}
     </div>
 
     <div class="group">
-      ${row('source', '🕌', 'Prayer times', S.settings.preset === 'cluj' ? 'Masjid Cluj-Napoca · Mawaqit' : `Calculated · ${METHODS[S.settings.method]?.label || ''}`)}
-      ${!S.settings.preset ? row('method', '⚙️', 'Calculation method', METHODS[S.settings.method]?.label || 'Muslim World League') : ''}
-      ${row('location', '📍', 'Location', S.settings.place, '')}
-      ${row('times-today', '🕰', "Today's times", '', '')}
+      ${row('source', I.mosque, 'Prayer times', S.settings.preset === 'cluj' ? 'Masjid Cluj-Napoca · Mawaqit' : `Calculated · ${METHODS[S.settings.method]?.label || ''}`)}
+      ${!S.settings.preset ? row('method', I.sliders, 'Calculation method', METHODS[S.settings.method]?.label || 'Muslim World League') : ''}
+      ${row('location', I.pin, 'Location', S.settings.place, '')}
+      ${row('times-today', I.clock, "Today's times", '', '')}
     </div>
 
     <div class="group">
@@ -1394,17 +1518,17 @@ function viewSettings() {
     </div>
 
     <div class="group">
-      ${installed ? row('noop', '✓', 'Installed', 'Running as an app on this device') : row('install', '📲', 'Install on this device', 'Add to your home screen')}
-      ${row('export', '⬇', 'Export a backup', 'Every day, as a JSON file')}
-      ${row('import', '⬆', 'Restore from backup', 'Nothing is lost until you confirm')}
-      ${row('clear-demo', '🧪', 'Remove sample history', 'Deletes only the demo days')}
-      ${row('reset', '🗑', 'Reset everything', 'Erases this couple space on this device')}
+      ${installed ? row('noop', I.check, 'Installed', 'Running as an app on this device') : row('install', I.phone, 'Install on this device', 'Add to your home screen')}
+      ${row('export', I.download, 'Export a backup', 'Every day, as a JSON file')}
+      ${row('import', I.upload, 'Restore from backup', 'Nothing is lost until you confirm')}
+      ${row('clear-demo', I.flask, 'Remove sample history', 'Deletes only the demo days')}
+      ${row('reset', I.trash, 'Reset everything', 'Erases this couple space on this device')}
     </div>
 
     <div class="group">
-      ${row('start-date', '📅', 'Counting from', new Date(parseDay(statsStart())).toLocaleDateString(LOCALE, { day: 'numeric', month: 'long', year: 'numeric' }))}
-      ${row('check-updates', '↻', 'Check for updates', 'Reload the newest build', `v${APP_VERSION}`)}
-      ${row('about', 'ⓘ', 'What\'s new', latest.notes, `v${latest.v}`)}
+      ${row('start-date', I.calendar, 'Counting from', new Date(parseDay(statsStart())).toLocaleDateString(LOCALE, { day: 'numeric', month: 'long', year: 'numeric' }))}
+      ${row('check-updates', I.refresh, 'Check for updates', 'Reload the newest build', `v${APP_VERSION}`)}
+      ${row('about', I.info, 'What\'s new', latest.notes, `v${latest.v}`)}
     </div>
 
     <p style="text-align:center;font-size:11.5px;color:var(--ink-3);line-height:1.7;margin:22px 0 0">
@@ -1907,8 +2031,27 @@ function syncLine() {
   return 'Connected';
 }
 
-function sheetConfirm(title, body, label, action) {
+function sheetGoalDone(id) {
+  const g = S.goals.find((x) => x.id === id);
+  if (!g) return;
   openSheet(`
+    <div class="grip"></div>
+    <h3>${esc(g.title)}</h3>
+    <p class="sheet-sub">The bar is full. Mark it as accomplished?</p>
+    <div class="sheet-list">
+      <button class="sheet-opt" data-act="goal-complete" data-id="${id}" data-active="true">
+        <span class="sw" style="background:var(--ok)"></span>
+        <span class="lbl">Yes — accomplished<span class="sub">It moves to your shelf</span></span>
+      </button>
+      <button class="sheet-opt" data-act="goal-notyet" data-id="${id}">
+        <span class="sw" style="background:var(--late)"></span>
+        <span class="lbl">Not yet<span class="sub">Keep it at 95%</span></span>
+      </button>
+    </div>
+  `);
+}
+
+function sheetConfirm(title, body, label, action) {  openSheet(`
     <div class="grip"></div>
     <h3>${title}</h3>
     <p class="sheet-sub">${body}</p>
@@ -1926,6 +2069,7 @@ const VIEWS = {
   home: viewHome,
   prayer: viewPrayer,
   plan: viewPlan,
+  goals: viewGoals,
   review: viewReview,
   us: viewUs,
   settings: viewSettings,
@@ -1997,6 +2141,39 @@ const ACTIONS = {
   },
 
   'plan-tab': (el) => { S.planTab = el.dataset.tab; refresh(); },
+
+  'goal-tab': (el) => { S.goalTab = el.dataset.tab; refresh(); },
+
+  'goal-complete': async (el) => {
+    const g = S.goals.find((x) => x.id === el.dataset.id);
+    if (!g) return;
+    g.progress = 100;
+    g.completedAt = Date.now();
+    await saveGoal(g);
+    haptic(16);
+    closeSheet();
+    refresh();
+    toast('Accomplished');
+  },
+
+  'goal-notyet': async (el) => {
+    const g = S.goals.find((x) => x.id === el.dataset.id);
+    if (!g) return;
+    g.progress = 95;
+    await saveGoal(g);
+    closeSheet();
+    refresh();
+  },
+
+  'restore-goal': async (el) => {
+    const g = S.goals.find((x) => x.id === el.dataset.id);
+    if (!g) return;
+    g.completedAt = null;
+    g.progress = 90;
+    await saveGoal(g);
+    refresh();
+    toast('Back on the list');
+  },
 
   'toggle-task': async (el) => {
     const t = S.plan.find((x) => x.id === el.dataset.id);
@@ -2278,13 +2455,28 @@ document.addEventListener('focusout', () => {
   }, 320);
 });
 
+document.addEventListener('change', async (e) => {
+  const bar = e.target.closest('input[data-goal]');
+  if (!bar) return;
+  const g = S.goals.find((x) => x.id === bar.dataset.goal);
+  if (!g) return;
+
+  const value = Math.max(0, Math.min(100, Number(bar.value) || 0));
+  g.progress = value;
+  await saveGoal(g);
+  refresh();
+
+  if (value >= 100) sheetGoalDone(g.id);
+});
+
 document.addEventListener('input', (e) => {
   const range = e.target;
-  if (range.matches('input[type="range"]')) {
-    range.style.setProperty('--p', range.value * 10);
-    const val = range.closest('.slider')?.querySelector('.val');
-    if (val) val.textContent = range.value;
-  }
+  if (!range.matches('input[type="range"]')) return;
+  range.style.setProperty('--p', range.value * 10);
+  const val = range.closest('.slider')?.querySelector('.val');
+  if (val) val.textContent = range.value;
+  const pct = range.closest('.goal')?.querySelector('.goal-pct');
+  if (pct) pct.textContent = `${range.value}%`;
 });
 
 document.addEventListener('submit', async (e) => {
@@ -2387,6 +2579,27 @@ document.addEventListener('submit', async (e) => {
     closeSheet();
     refresh();
     toast(`Counting from ${v}`);
+    return;
+  }
+
+  if (kind === 'add-goal') {
+    const who = actor();
+    const title = String(data.title || '').trim();
+    if (!title) return;
+    const goal = {
+      id: uid(),
+      memberId: who.id,
+      scope: form.dataset.scope === 'secondary' ? 'secondary' : 'main',
+      title,
+      progress: 0,
+      createdAt: Date.now(),
+      completedAt: null,
+      demo: false,
+    };
+    await saveGoal(goal);
+    haptic(8);
+    form.reset();
+    refresh();
     return;
   }
 

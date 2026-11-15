@@ -6,7 +6,7 @@
    ============================================================ */
 
 const DB_NAME = 'na-app';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export const SCHEMA_VERSION = 1;
 
@@ -17,6 +17,7 @@ const STORES = [
   ['plan', { keyPath: 'id', indexes: [['day', 'day'], ['memberId', 'memberId']] }],
   ['reviews', { keyPath: 'id', indexes: [['day', 'day'], ['memberId', 'memberId']] }],
   ['reactions', { keyPath: 'id' }],
+  ['goals', { keyPath: 'id', indexes: [['memberId', 'memberId']] }],
   ['snapshots', { keyPath: 'key' }],
 ];
 
@@ -132,16 +133,17 @@ export async function putMany(store, recs) {
 }
 
 export async function loadAll() {
-  const [meta, members, prayers, plan, reviews, reactions] = await Promise.all(
-    STORES.slice(0, 6).map(([name]) => getAll(name))
-  );
+  const names = STORES.map(([n]) => n).filter((n) => n !== 'snapshots');
+  const rows = await Promise.all(names.map((n) => getAll(n)));
+  const bag = Object.fromEntries(names.map((n, i) => [n, rows[i] || []]));
   return {
-    meta: Object.fromEntries((meta || []).map((m) => [m.key, m])),
-    members: members || [],
-    prayers: prayers || [],
-    plan: plan || [],
-    reviews: reviews || [],
-    reactions: reactions || [],
+    meta: Object.fromEntries((bag.meta || []).map((m) => [m.key, m])),
+    members: bag.members,
+    prayers: bag.prayers,
+    plan: bag.plan,
+    reviews: bag.reviews,
+    reactions: bag.reactions,
+    goals: bag.goals,
   };
 }
 
@@ -217,7 +219,7 @@ export async function saveMeta(key, value) {
 }
 
 export async function wipeUserData() {
-  for (const name of ['members', 'prayers', 'plan', 'reviews', 'reactions']) {
+  for (const name of ['members', 'prayers', 'plan', 'reviews', 'reactions', 'goals']) {
     await clear(name);
   }
   for (const key of ['app', 'seeded', 'settings', 'sync']) {

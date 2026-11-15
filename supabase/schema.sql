@@ -101,6 +101,22 @@ create index if not exists tombstones_couple_time on tombstones (couple_id, dele
 -- Later additions, safe to run on an existing database.
 alter table plan_items add column if not exists progress text not null default 'todo';
 
+create table if not exists goals (
+  id           text primary key,
+  couple_id    uuid not null references couples(id) on delete cascade,
+  member_id    text not null,
+  scope        text not null default 'main',
+  title        text not null,
+  progress     integer not null default 0,
+  created_at   timestamptz,
+  completed_at timestamptz,
+  updated_at   timestamptz not null default now(),
+  deleted_at   timestamptz
+);
+create index if not exists goals_couple_updated on goals (couple_id, updated_at);
+alter table goals enable row level security;
+revoke all on goals from anon, authenticated;
+
 -- Close the doors: the anon key alone can touch nothing.
 alter table couples     enable row level security;
 alter table members     enable row level security;
@@ -182,6 +198,9 @@ begin
     'reactions',
       coalesce((select jsonb_agg(to_jsonb(r)) from reactions r
                 where r.couple_id = cid and r.updated_at > p_since), '[]'::jsonb),
+    'goals',
+      coalesce((select jsonb_agg(to_jsonb(g)) from goals g
+                where g.couple_id = cid and g.updated_at > p_since), '[]'::jsonb),
     'deletes',
       coalesce((select jsonb_agg(jsonb_build_object('kind', t.kind, 'id', t.row_id)) from tombstones t
                 where t.couple_id = cid and t.deleted_at > p_since), '[]'::jsonb),
@@ -276,8 +295,24 @@ begin
     end loop;
   end if;
 
-  if jsonb_typeof(p_data->'members') = 'array' then
-    for r in select * from jsonb_array_elements(p_data->'members') loop
+  if jsonb_typeof(p_data->'goals') = 'array' then
+    for r in select * from jsonb_array_elements(p_data->'goals') loop
+      insert into goals (id, couple_id, member_id, scope, title, progress, created_at, completed_at, updated_at)
+      values (r->>'id', cid, r->>'member_id', coalesce(r->>'scope','main'), r->>'title',
+              coalesce((r->>'progress')::int, 0),
+              nullif(r->>'created_at','')::timestamptz,
+              nullif(r->>'completed_at','')::timestamptz, clock)
+      on conflict (id) do update
+        set title = excluded.title,
+            scope = excluded.scope,
+            progress = excluded.progress,
+            completed_at = excluded.completed_at,
+            updated_at = clock,
+            deleted_at = null;
+    end loop;
+  end if;
+
+  if jsonb_typeof(p_data->'members') = 'array' then    for r in select * from jsonb_array_elements(p_data->'members') loop
       insert into members (id, couple_id, display_name, color, avatar, tz, updated_at)
       values (r->>'id', cid, r->>'name', r->>'color', r->>'avatar', r->>'tz', clock)
       on conflict (id) do update
@@ -302,6 +337,8 @@ begin
         update reviews set deleted_at = clock, updated_at = clock where id = d->>'id' and couple_id = cid;
       elsif d->>'kind' = 'reactions' then
         update reactions set deleted_at = clock, updated_at = clock where id = d->>'id' and couple_id = cid;
+      elsif d->>'kind' = 'goals' then
+        update goals set deleted_at = clock, updated_at = clock where id = d->>'id' and couple_id = cid;
       end if;
     end loop;
   end if;

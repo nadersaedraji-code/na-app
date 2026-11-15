@@ -10,13 +10,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '2.1.0';
+const APP_VERSION = '2.1.1';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '2.1.1', at: '15 Nov 2026', notes: "The streak gets a face: a big number, the week, your best." },
   { v: '2.1.0', at: '15 Nov 2026', notes: "Streaks: five prayers on time, day after day." },
   { v: '2.0.0', at: '15 Nov 2026', notes: "A weekly recap that reads your week back to you — prayers, tasks, mood, the best day." },
   { v: '1.9.1', at: '15 Nov 2026', notes: "Serif sheet titles and warmer section labels." },
@@ -966,24 +967,43 @@ const flameSvg = (size = 16) =>
 function streakCard() {
   const who = actor();
   const s = streakOf(who.id);
-  if (s.current > 0) {
-    return `
-      <div class="streak">
-        <span class="flame">${flameSvg(18)}</span>
-        <div>
-          <div class="k">${s.current}-day streak</div>
-          <div class="d">Every prayer on time${s.best > s.current ? ` · best ${s.best}` : ''}</div>
-        </div>
-      </div>`;
+  const perfect = perfectDays(who.id);
+  const start = statsStart();
+
+  const week = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = addDays(new Date(), -i);
+    const k = dayKey(d);
+    week.push({
+      k,
+      letter: d.toLocaleDateString(LOCALE, { weekday: 'narrow' }),
+      on: perfect.has(k),
+      today: i === 0,
+      before: k < start,
+    });
   }
+
   return `
-    <div class="streak zero">
-      <span class="flame">${flameSvg(18)}</span>
-      <div>
-        <div class="k">Start a streak</div>
-        <div class="d">${s.best ? `Your best is ${s.best} days` : 'Five on-time prayers, one day at a time'}</div>
+    <section class="streak-card ${s.current ? '' : 'cold'}">
+      <div class="streak-top">
+        <div class="streak-figure">
+          <span class="streak-flame">${flameSvg(20)}</span>
+          <span class="streak-n num">${s.current}</span>
+        </div>
+        <div class="streak-text">
+          <div class="streak-k">day streak</div>
+          <div class="streak-d">${s.current ? 'Every prayer, on time' : 'Five on-time prayers starts it'}</div>
+        </div>
+        ${s.best > s.current ? `<div class="streak-best"><span>best</span><b class="num">${s.best}</b></div>` : ''}
       </div>
-    </div>`;
+      <div class="streak-week">
+        ${week.map((d) => `
+          <div class="sw">
+            <span class="l">${d.letter}</span>
+            <i class="${d.on ? 'on' : d.today && !d.before ? 'today' : ''}" ${d.before ? 'style="opacity:.35"' : ''}></i>
+          </div>`).join('')}
+      </div>
+    </section>`;
 }
 
 /* ============================================================

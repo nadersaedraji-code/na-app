@@ -6,10 +6,10 @@ OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 
 os.makedirs(OUT, exist_ok=True)
 
 S = 1024
-BG_TOP = (22, 24, 32)
-BG_BOT = (9, 10, 14)
-C_N = (138, 167, 255)
-C_A = (241, 147, 172)
+BG_TOP = (36, 26, 33)
+BG_BOT = (20, 15, 20)
+C_N = (236, 118, 158)
+C_A = (201, 166, 222)
 
 
 def rounded_rect_mask(size, radius):

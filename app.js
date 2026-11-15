@@ -10,13 +10,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.4.0';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '1.4.0', at: '15 Nov 2026', notes: "Lighter, warmer, pinker — blush cream by day, soft plum by night." },
   { v: '1.3.0', at: '15 Nov 2026', notes: "Starts empty — no sample days, no imaginary prayers." },
   { v: '1.2.1', at: '15 Nov 2026', notes: "Resetting now forgets everything, including the pairing code." },
   { v: '1.2.0', at: '15 Nov 2026', notes: "A home of your own, and a softer look throughout." },
@@ -44,7 +45,7 @@ const STATUS_LABEL = {
   pending: 'Not logged',
 };
 
-const PALETTE = ['#8AA7FF', '#F193AC', '#E8B168', '#86C8A8', '#B49BFF', '#7FC8D9'];
+const PALETTE = ['#E8749B', '#B98BC9', '#F0A48C', '#8FBFD9', '#9BC9AE', '#D9A0C2'];
 const AVATARS = ['🌙', '⭐', '🌿', '🌸', '☀️', '🕊️', '🍃', '🔥', '🌊'];
 
 const DEFAULTS = {
@@ -52,7 +53,7 @@ const DEFAULTS = {
   lng: 2.3522,
   place: 'Paris',
   method: 'MWL',
-  theme: 'dark',
+  theme: 'light',
   notif: { prayer: true, followup: true, review: true, partner: true },
   silent: [22, 7],
 };
@@ -311,11 +312,11 @@ async function loadState() {
 function getNow() { return new Date(); }
 
 function applyTheme() {
-  const pref = S.settings.theme || 'dark';
+  const pref = S.settings.theme || 'light';
   const dark = pref === 'dark' || (pref === 'system' && !window.matchMedia('(prefers-color-scheme: light)').matches);
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute('content', dark ? '#0A0B0F' : '#F6F4F1');
+  if (meta) meta.setAttribute('content', dark ? '#191419' : '#FBF6F4');
 }
 
 function showApp() {

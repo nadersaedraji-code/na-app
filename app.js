@@ -10,13 +10,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '2.2.0';
+const APP_VERSION = '2.2.1';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '2.2.1', at: '15 Nov 2026', notes: "Qibla renders correctly from the first paint, and assets are versioned." },
   { v: '2.2.0', at: '15 Nov 2026', notes: "A Qibla compass that points to the Kaaba." },
   { v: '2.1.3', at: '15 Nov 2026', notes: "The app now lives at a permanent address." },
   { v: '2.1.2', at: '15 Nov 2026', notes: "Check for updates now performs a true hard refresh." },
@@ -1067,7 +1068,7 @@ function sheetQibla() {
   const ticks = Array.from({ length: 24 }, (_, i) => {
     const angle = i * 15;
     const long = i % 3 === 0;
-    return `<line class="q-tick${long ? ' long' : ''}" x1="120" y1="${long ? 16 : 20}" x2="120" y2="27" transform="rotate(${angle} 120 120)"/>`;
+    return `<line class="q-tick${long ? ' long' : ''}" stroke="currentColor" stroke-opacity=".18" stroke-linecap="round" x1="120" y1="${long ? 16 : 20}" x2="120" y2="27" transform="rotate(${angle} 120 120)"/>`;
   }).join('');
 
   openSheet(`
@@ -1078,19 +1079,19 @@ function sheetQibla() {
 
       <div class="q-dial-wrap">
         <svg class="q-svg" viewBox="0 0 240 240" aria-hidden="true">
-          <circle class="q-ring" cx="120" cy="120" r="112"/>
+          <circle class="q-ring" cx="120" cy="120" r="112" fill="none" stroke="currentColor" stroke-opacity=".16"/>
           <g id="qDial">
             ${ticks}
-            <text class="q-card" x="120" y="46" text-anchor="middle">N</text>
-            <text class="q-card" x="194" y="125" text-anchor="middle">E</text>
-            <text class="q-card" x="120" y="204" text-anchor="middle">S</text>
-            <text class="q-card" x="46" y="125" text-anchor="middle">W</text>
+            <text class="q-card" x="120" y="46" text-anchor="middle" fill="currentColor" opacity=".55">N</text>
+            <text class="q-card" x="194" y="125" text-anchor="middle" fill="currentColor" opacity=".55">E</text>
+            <text class="q-card" x="120" y="204" text-anchor="middle" fill="currentColor" opacity=".55">S</text>
+            <text class="q-card" x="46" y="125" text-anchor="middle" fill="currentColor" opacity=".55">W</text>
             <g transform="rotate(${bearing} 120 120)">
-              <path class="q-needle" d="M120 46 L127 82 L120 76 L113 82 Z"/>
-              <path class="q-tail" d="M120 194 L124 166 L116 166 Z"/>
+              <path class="q-needle" fill="#E8749B" d="M120 46 L127 82 L120 76 L113 82 Z"/>
+              <path class="q-tail" fill="currentColor" opacity=".16" d="M120 194 L124 166 L116 166 Z"/>
             </g>
           </g>
-          <circle class="q-hub" cx="120" cy="120" r="5.5"/>
+          <circle class="q-hub" cx="120" cy="120" r="5.5" fill="currentColor"/>
         </svg>
       </div>
 

@@ -40,4 +40,12 @@ let sw = fs.readFileSync(swPath, 'utf8');
 sw = sw.replace(/const VERSION = '[^']+';/, `const VERSION = '${version}';`);
 fs.writeFileSync(swPath, sw);
 
+// index.html — version the asset URLs, so a new build can never pair
+// new JavaScript with an old stylesheet (the "black compass" bug).
+const htmlPath = path.join(root, 'index.html');
+let html = fs.readFileSync(htmlPath, 'utf8');
+html = html.replace(/href="\.\/styles\.css(\?v=[\d.]+)?"/, `href="./styles.css?v=${version}"`);
+html = html.replace(/src="\.\/app\.js(\?v=[\d.]+)?"/, `src="./app.js?v=${version}"`);
+fs.writeFileSync(htmlPath, html);
+
 console.log(`N&A is now v${version} — “${note}”`);

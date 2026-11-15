@@ -10,13 +10,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '2.4.1';
+const APP_VERSION = '2.5.0';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '2.5.0', at: '16 Nov 2026', notes: "Forty-eight avatars, in a picker that scrolls." },
   { v: '2.4.1', at: '16 Nov 2026', notes: "A test button that fires the urgent Isha notification." },
   { v: '2.4.0', at: '15 Nov 2026', notes: "Reminders per prayer, with an urgent warning before the window closes." },
   { v: '2.3.0', at: '15 Nov 2026', notes: "The Qibla dial carries the Kaaba at its true direction." },
@@ -66,7 +67,16 @@ const STATUS_LABEL = {
 };
 
 const PALETTE = ['#DE5A87', '#A87FC0', '#E08A6E', '#7FB3D0', '#84BFA3', '#C98FB8'];
-const AVATARS = ['🌙', '⭐', '🌿', '🌸', '☀️', '🕊️', '🍃', '🔥', '🌊'];
+const AVATARS = [
+  '🌙', '⭐', '🌟', '✨', '💫', '☄️',
+  '🌿', '🍃', '🌱', '🍀', '🌵', '🌴',
+  '🌸', '🌼', '🌷', '🌹', '🌺', '🌻',
+  '🪷', '🍂', '🌾', '🪴', '☀️', '🌤️',
+  '⛅', '🌈', '🔥', '🕯️', '🕊️', '🦋',
+  '🐝', '🐞', '🐢', '🦢', '🦉', '🐚',
+  '🐳', '🌊', '❤️', '🤍', '💛', '💚',
+  '💜', '🫶', '🤲', '🧿', '📿', '🎈',
+];
 
 /* A small, curated rotation. One verse a day, chosen by date. */
 const VERSES = [

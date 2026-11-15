@@ -10,13 +10,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '1.8.1';
+const APP_VERSION = '1.9.0';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '1.9.0', at: '15 Nov 2026', notes: "Serif titles, a gradient ring, and small details that feel made." },
   { v: '1.8.1', at: '15 Nov 2026', notes: "Every objective can be renamed, moved, or deleted — with undo." },
   { v: '1.8.0', at: '15 Nov 2026', notes: "Objectives with progress bars, a two-tier shelf, and a calmer settings list." },
   { v: '1.7.0', at: '15 Nov 2026', notes: "Prayer times from Masjid Cluj-Napoca, and tasks that can be half-done." },
@@ -820,6 +821,12 @@ function viewPrayer() {
   const ring = `
     <div class="ring-wrap">
       <svg class="ring" viewBox="0 0 128 128" aria-hidden="true">
+        <defs>
+          <linearGradient id="naRingGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" style="stop-color:var(--accent)"></stop>
+            <stop offset="1" style="stop-color:var(--pink)"></stop>
+          </linearGradient>
+        </defs>
         <circle class="bg" cx="64" cy="64" r="52"></circle>
         <circle class="fg" cx="64" cy="64" r="52"
           stroke-dasharray="${C.toFixed(1)}"
@@ -1436,10 +1443,12 @@ function calendarHTML(base, a, b) {
       const n = prayerCount(mem.id, k);
       return `<i><b style="width:${(n / 5) * 100}%;background:${mem.color}"></b></i>`;
     }).join('');
+    const hasReview = S.members.some((mem) => reviewFor(mem.id, k));
     cells += `<button class="day ${k === today && !inactive ? 'today' : ''} ${inactive ? 'other' : ''}"
       data-act="day" data-day="${k}" ${inactive ? 'disabled aria-disabled="true"' : ''}>
       <span class="n num">${dnum}</span>
       <span class="marks">${marks}</span>
+      ${hasReview && !inactive ? '<i class="rev"></i>' : ''}
     </button>`;
   }
 

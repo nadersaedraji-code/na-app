@@ -10,13 +10,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '1.4.0';
+const APP_VERSION = '1.4.1';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '1.4.1', at: '15 Nov 2026', notes: "Existing devices move to the new palette; a visible version and a manual refresh." },
   { v: '1.4.0', at: '15 Nov 2026', notes: "Lighter, warmer, pinker — blush cream by day, soft plum by night." },
   { v: '1.3.0', at: '15 Nov 2026', notes: "Starts empty — no sample days, no imaginary prayers." },
   { v: '1.2.1', at: '15 Nov 2026', notes: "Resetting now forgets everything, including the pairing code." },
@@ -263,6 +264,7 @@ async function boot() {
   try {
     await db.ensureSchema();
     await loadState();
+    await migrateTheme();
     db.setHooks({
       onWrite: (store, rec) => sync.queueWrite(store, rec),
       onDelete: (store, id) => sync.queueDelete(store, id),
@@ -291,6 +293,17 @@ async function boot() {
     setTimeout(() => toast(`Updated to v${updated}`), 700);
   }
   S.ready = true;
+}
+
+/* One-time: devices onboarded before 1.4.0 saved "dark". Move them to the
+   new blush palette once, then respect whatever they choose afterwards. */
+async function migrateTheme() {
+  if (!S.members.length) return;
+  if (S.settings.themeV2) return;
+  S.settings.theme = 'light';
+  S.settings.themeV2 = true;
+  await db.put('meta', { key: 'settings', value: S.settings });
+  applyTheme();
 }
 
 async function loadState() {
@@ -689,7 +702,7 @@ function viewHome() {
       </button>
     </div>
 
-    <p class="quiet">A quiet place for two.</p>
+    <p class="quiet">A quiet place for two · v${APP_VERSION}</p>
   `;
 }
 
@@ -1189,6 +1202,7 @@ function viewSettings() {
     </div>
 
     <div class="group">
+      ${row('check-updates', '↻', 'Check for updates', 'Reload the newest build', `v${APP_VERSION}`)}
       ${row('about', 'ⓘ', 'What\'s new', latest.notes, `v${latest.v}`)}
     </div>
 
@@ -1905,6 +1919,14 @@ const ACTIONS = {
   },
 
   about: () => sheetAbout(),
+  'check-updates': async () => {
+    toast('Checking for a new build…');
+    try {
+      const reg = await navigator.serviceWorker?.getRegistration();
+      await reg?.update();
+    } catch { /* ignore */ }
+    setTimeout(() => location.reload(), 1000);
+  },
   install: () => sheetInstall(),
   geolocate: () => {
     if (!navigator.geolocation) return toast('Location is not available here');

@@ -757,12 +757,13 @@ input[type="range"]::-moz-range-thumb{width:24px;height:24px;border:0;border-rad
 .dot-row i.on{background:var(--ink);width:18px;border-radius:99px;}
 .avatars{
   display:grid;grid-template-columns:repeat(6,1fr);gap:8px;
-  max-height:252px;overflow-y:auto;padding:4px 2px;
-  -webkit-overflow-scrolling:touch;overscroll-behavior:contain;
+  padding:4px 2px;
 }
+/* only the onboarding panel needs its own scroll — the sheet scrolls itself */
+.onboard .avatars{max-height:252px;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;}
 .av-pick{
   width:100%;aspect-ratio:1;border-radius:15px;display:grid;place-items:center;font-size:21px;
-  background:var(--card-flat);transition:all .2s var(--spring);
+  background:var(--card-flat);transition:all .2s var(--spring);touch-action:manipulation;
 }
 .av-pick[aria-checked="true"]{transform:scale(1.06);box-shadow:0 0 0 2px var(--bg), 0 0 0 3.5px var(--ink);}
 

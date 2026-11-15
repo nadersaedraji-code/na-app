@@ -10,13 +10,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '2.5.0';
+const APP_VERSION = '2.5.1';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '2.5.1', at: '16 Nov 2026', notes: "One scroll container for the avatar picker, and a confirmation when it saves." },
   { v: '2.5.0', at: '16 Nov 2026', notes: "Forty-eight avatars, in a picker that scrolls." },
   { v: '2.4.1', at: '16 Nov 2026', notes: "A test button that fires the urgent Isha notification." },
   { v: '2.4.0', at: '15 Nov 2026', notes: "Reminders per prayer, with an urgent warning before the window closes." },
@@ -3271,6 +3272,7 @@ const ACTIONS = {
     await db.put('members', m);
     closeSheet();
     refresh();
+    toast('Colour updated');
   },
   'pick-avatar': async (el) => {
     const m = memberById(el.dataset.id);
@@ -3279,6 +3281,7 @@ const ACTIONS = {
     await db.put('members', m);
     closeSheet();
     refresh();
+    toast('Avatar updated');
   },
 
   'ob-next': () => showObStep(2),

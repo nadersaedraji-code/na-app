@@ -10,13 +10,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '1.4.1';
+const APP_VERSION = '1.5.0';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '1.5.0', at: '15 Nov 2026', notes: "Deeper ink, crisp white cards on blush, one dark anchor block." },
   { v: '1.4.1', at: '15 Nov 2026', notes: "Existing devices move to the new palette; a visible version and a manual refresh." },
   { v: '1.4.0', at: '15 Nov 2026', notes: "Lighter, warmer, pinker — blush cream by day, soft plum by night." },
   { v: '1.3.0', at: '15 Nov 2026', notes: "Starts empty — no sample days, no imaginary prayers." },
@@ -329,7 +330,7 @@ function applyTheme() {
   const dark = pref === 'dark' || (pref === 'system' && !window.matchMedia('(prefers-color-scheme: light)').matches);
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute('content', dark ? '#191419' : '#FBF6F4');
+  if (meta) meta.setAttribute('content', dark ? '#151017' : '#F7EFF1');
 }
 
 function showApp() {
@@ -691,11 +692,13 @@ function viewHome() {
 
     <div class="tiles">
       <button class="tile" data-act="tab" data-view="plan">
+        <span class="go">›</span>
         <div class="k">Plan</div>
         <div class="v num">${myDone}<small> / ${myPlan.length}</small></div>
         <div class="d">${myPlan.length - myDone > 0 ? `${myPlan.length - myDone} left today` : 'All clear'}</div>
       </button>
       <button class="tile" data-act="tab" data-view="review">
+        <span class="go">›</span>
         <div class="k">Review</div>
         <div class="v num">${myReview ? `${myReview.productivity}<small> · </small>${myReview.happiness}` : '—'}</div>
         <div class="d">${myReview ? 'Today is kept' : theirsReview ? `${esc(p.name)} logged theirs` : 'Close the day tonight'}</div>

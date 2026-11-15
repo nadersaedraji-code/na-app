@@ -270,6 +270,32 @@ input,textarea,select{font:inherit;color:inherit;}
 .streak-card.cold .streak-n{color:var(--ink-3);}
 .hero-streak{display:inline-flex;align-items:center;gap:6px;margin-top:11px;font-size:12px;font-weight:600;color:var(--pink);}
 
+/* qibla --------------------------------------------------------------- */
+.qibla-strip{display:flex;align-items:center;gap:13px;width:100%;margin-top:14px;padding:14px 16px;border-radius:var(--r-md);background:var(--card-flat);box-shadow:inset 0 0 0 1px var(--line);text-align:left;transition:transform .15s var(--ease);}
+.qibla-strip:active{transform:scale(.985);}
+.qs-ico{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:color-mix(in srgb, var(--pink) 12%, transparent);color:var(--pink);flex:none;}
+.qs-body{flex:1;min-width:0;}
+.qs-k{display:block;font-size:14.5px;font-weight:600;letter-spacing:-.01em;}
+.qs-d{display:block;font-size:12px;color:var(--ink-3);margin-top:2px;}
+.qs-go{color:var(--ink-3);opacity:.6;}
+
+.q-dial-wrap{width:min(70vw,270px);margin:10px auto 16px;transition:transform .25s var(--ease);}
+.q-svg{width:100%;height:auto;display:block;}
+.q-ring{fill:none;stroke:var(--line-2);stroke-width:1;}
+.q-tick{stroke:var(--line-2);stroke-width:1.6;stroke-linecap:round;}
+.q-tick.long{stroke:var(--ink-3);stroke-width:2;}
+.q-card{fill:var(--ink-3);font-size:11px;font-weight:600;letter-spacing:.08em;font-family:var(--font);}
+.q-needle{fill:var(--pink);}
+.q-tail{fill:var(--line-2);}
+.q-hub{fill:var(--ink);}
+.q-dial-wrap.aligned{transform:scale(1.015);}
+.q-dial-wrap.aligned .q-needle{filter:drop-shadow(0 0 12px color-mix(in srgb, var(--pink) 75%, transparent));}
+.q-readout{font-family:var(--serif);font-size:30px;letter-spacing:-.02em;line-height:1;text-align:center;}
+.q-readout span{font-size:13px;color:var(--ink-3);font-family:var(--font);letter-spacing:.1em;text-transform:uppercase;margin-left:5px;}
+.q-live{font-size:13px;color:var(--ink-3);margin-top:9px;min-height:18px;text-align:center;}
+.q-live.ok{color:var(--pink);font-weight:600;}
+.q-note{font-size:11.5px;color:var(--ink-3);line-height:1.6;margin-top:16px;text-align:center;}
+
 /* recap --------------------------------------------------------------- */
 .recap-banner{
   position:relative;margin-top:14px;border-radius:24px;overflow:hidden;

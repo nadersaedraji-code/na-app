@@ -10,13 +10,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '2.1.3';
+const APP_VERSION = '2.2.0';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '2.2.0', at: '15 Nov 2026', notes: "A Qibla compass that points to the Kaaba." },
   { v: '2.1.3', at: '15 Nov 2026', notes: "The app now lives at a permanent address." },
   { v: '2.1.2', at: '15 Nov 2026', notes: "Check for updates now performs a true hard refresh." },
   { v: '2.1.1', at: '15 Nov 2026', notes: "The streak gets a face: a big number, the week, your best." },
@@ -1009,6 +1010,152 @@ function streakCard() {
 }
 
 /* ============================================================
+   Qibla — the bearing to the Kaaba, and a live compass
+   ============================================================ */
+const KAABA = { lat: 21.4225, lng: 39.8262 };
+const CARDINALS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+
+function qiblaBearing(lat, lng) {
+  const p1 = (lat * Math.PI) / 180;
+  const p2 = (KAABA.lat * Math.PI) / 180;
+  const dl = ((KAABA.lng - lng) * Math.PI) / 180;
+  const y = Math.sin(dl) * Math.cos(p2);
+  const x = Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl);
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+}
+
+function kaabaDistanceKm(lat, lng) {
+  const R = 6371;
+  const p1 = (lat * Math.PI) / 180;
+  const p2 = (KAABA.lat * Math.PI) / 180;
+  const dp = p2 - p1;
+  const dl = ((KAABA.lng - lng) * Math.PI) / 180;
+  const a = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+let compassStop = null;
+function stopCompass() {
+  if (compassStop) { compassStop(); compassStop = null; }
+}
+
+const compassIcon = (size = 20) =>
+  `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.6"/><path d="m15.4 8.6-2.1 4.7-4.7 2.1 2.1-4.7 4.7-2.1Z"/></svg>`;
+
+function qiblaStrip() {
+  const { lat, lng } = S.settings;
+  const bearing = qiblaBearing(lat, lng);
+  const cardinal = CARDINALS[Math.round(bearing / 45) % 8];
+  const km = Math.round(kaabaDistanceKm(lat, lng));
+  return `
+    <button class="qibla-strip" data-act="qibla">
+      <span class="qs-ico">${compassIcon(18)}</span>
+      <span class="qs-body">
+        <span class="qs-k">Qibla</span>
+        <span class="qs-d">${Math.round(bearing)}° ${cardinal} · ${km.toLocaleString(LOCALE)} km</span>
+      </span>
+      <span class="qs-go">›</span>
+    </button>`;
+}
+
+function sheetQibla() {
+  const { lat, lng } = S.settings;
+  const bearing = qiblaBearing(lat, lng);
+  const cardinal = CARDINALS[Math.round(bearing / 45) % 8];
+  const km = Math.round(kaabaDistanceKm(lat, lng));
+
+  const ticks = Array.from({ length: 24 }, (_, i) => {
+    const angle = i * 15;
+    const long = i % 3 === 0;
+    return `<line class="q-tick${long ? ' long' : ''}" x1="120" y1="${long ? 16 : 20}" x2="120" y2="27" transform="rotate(${angle} 120 120)"/>`;
+  }).join('');
+
+  openSheet(`
+    <div class="grip"></div>
+    <div class="qibla-sheet">
+      <h3>Qibla</h3>
+      <p class="sheet-sub">${esc(S.settings.place)} · ${km.toLocaleString(LOCALE)} km to the Kaaba</p>
+
+      <div class="q-dial-wrap">
+        <svg class="q-svg" viewBox="0 0 240 240" aria-hidden="true">
+          <circle class="q-ring" cx="120" cy="120" r="112"/>
+          <g id="qDial">
+            ${ticks}
+            <text class="q-card" x="120" y="46" text-anchor="middle">N</text>
+            <text class="q-card" x="194" y="125" text-anchor="middle">E</text>
+            <text class="q-card" x="120" y="204" text-anchor="middle">S</text>
+            <text class="q-card" x="46" y="125" text-anchor="middle">W</text>
+            <g transform="rotate(${bearing} 120 120)">
+              <path class="q-needle" d="M120 46 L127 82 L120 76 L113 82 Z"/>
+              <path class="q-tail" d="M120 194 L124 166 L116 166 Z"/>
+            </g>
+          </g>
+          <circle class="q-hub" cx="120" cy="120" r="5.5"/>
+        </svg>
+      </div>
+
+      <div class="q-readout"><b class="num">${Math.round(bearing)}°</b> <span>${cardinal}</span></div>
+      <div class="q-live" id="qLive">Hold the phone flat for live guidance</div>
+
+      <button class="btn primary wide" id="qPerm" data-act="qibla-permission" hidden>Turn on the compass</button>
+
+      <p class="q-note" id="qNote">The rose needle points to the Kaaba. If the dial doesn't move, your device has no compass — the top of the dial is north.</p>
+    </div>
+  `, (sheet) => attachCompass(sheet, bearing));
+}
+
+function attachCompass(sheet, bearing) {
+  const dial = sheet.querySelector('#qDial');
+  const wrap = sheet.querySelector('.q-dial-wrap');
+  const live = sheet.querySelector('#qLive');
+  const note = sheet.querySelector('#qNote');
+  const perm = sheet.querySelector('#qPerm');
+  let heard = false;
+
+  if (perm && typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    perm.hidden = false;
+  }
+
+  const onOrient = (e) => {
+    let heading = null;
+    if (typeof e.webkitCompassHeading === 'number' && e.webkitCompassHeading >= 0) heading = e.webkitCompassHeading;
+    else if (typeof e.alpha === 'number' && e.alpha !== null) heading = 360 - e.alpha;
+    if (heading == null) return;
+
+    heard = true;
+    heading = ((heading % 360) + 360) % 360;
+    dial.setAttribute('transform', `rotate(${-heading.toFixed(1)} 120 120)`);
+
+    const delta = ((bearing - heading + 540) % 360) - 180;
+    const abs = Math.abs(delta);
+    const aligned = abs < 6;
+    wrap.classList.toggle('aligned', aligned);
+    live.textContent = aligned
+      ? 'Facing the Qibla'
+      : `Turn ${Math.round(abs)}° ${delta > 0 ? 'right' : 'left'}`;
+    live.classList.toggle('ok', aligned);
+
+    if (typeof e.webkitCompassAccuracy === 'number' && e.webkitCompassAccuracy >= 0) {
+      note.textContent = `Compass accuracy ±${Math.round(e.webkitCompassAccuracy)}°.`;
+    }
+  };
+
+  window.addEventListener('deviceorientationabsolute', onOrient, true);
+  window.addEventListener('deviceorientation', onOrient, true);
+  compassStop = () => {
+    window.removeEventListener('deviceorientationabsolute', onOrient, true);
+    window.removeEventListener('deviceorientation', onOrient, true);
+  };
+
+  setTimeout(() => {
+    if (!heard) {
+      live.textContent = `The Qibla is ${Math.round(bearing)}° from north`;
+      note.textContent = 'No compass reading on this device. Hold the phone flat and use the bearing above, or turn on the compass below.';
+    }
+  }, 1600);
+}
+
+/* ============================================================
    View — Home
    ============================================================ */
 function viewHome() {
@@ -1202,6 +1349,8 @@ function viewPrayer() {
     </div>
 
     <div class="prayers stagger">${rows}</div>
+
+    ${qiblaStrip()}
 
     ${dayKey() < statsStart() ? `<div class="notice">Counting begins ${parseDay(statsStart()).toLocaleDateString(LOCALE, { day: 'numeric', month: 'long' })} — today is yours, it just isn't averaged yet.</div>` : ''}
 
@@ -1993,6 +2142,7 @@ function openSheet(html, onReady) {
 }
 
 function closeSheet(instant = false) {
+  stopCompass();
   const root = $('#overlay-root');
   if (!root.firstElementChild) return;
   const sheet = root.querySelector('.sheet');
@@ -2489,6 +2639,22 @@ const ACTIONS = {
   'goal-tab': (el) => { S.goalTab = el.dataset.tab; refresh(); },
 
   'goal-menu': (el) => sheetGoal(el.dataset.id),
+
+  qibla: () => sheetQibla(),
+
+  'qibla-permission': async () => {
+    try {
+      const res = await DeviceOrientationEvent.requestPermission();
+      if (res === 'granted') {
+        toast('Compass on');
+        document.querySelector('#qPerm')?.setAttribute('hidden', '');
+      } else {
+        toast('Compass permission denied');
+      }
+    } catch {
+      toast('Compass unavailable on this device');
+    }
+  },
 
   'open-recap': (el) => sheetRecap(Number(el.dataset.week)),
 

@@ -1,0 +1,98 @@
+# Handoff — read this first
+
+Everything needed to pick this project up in a fresh session, with no memory of
+the conversation that built it.
+
+---
+
+## Where it lives
+
+| | |
+|---|---|
+| **Live app** | https://nadersaedraji-code.github.io/na-app/ |
+| **Repository** | https://github.com/nadersaedraji-code/na-app (public) |
+| **Local project** | `na-app/` in the workspace |
+| **Token** | `~/.config/na/token` (chmod 600, never in the repo) |
+
+The app is installed on two phones from the Pages URL. Updates reach them by
+pushing; the service worker swaps builds on next open.
+
+## Ship a change
+
+```bash
+cd na-app
+node tools/bump.mjs 2.5.0 "One sentence for What's new"
+git add -A && git commit -m "…"
+GITHUB_TOKEN="$(cat ~/.config/na/token)" GITHUB_REPO="nadersaedraji-code/na-app" \
+  node tools/deploy.mjs
+```
+
+`bump.mjs` updates the version in `app.js`, `sw.js`, and the `?v=` stamps on
+`styles.css` / `app.js` in `index.html`. That last part matters: it prevents new
+JavaScript pairing with an old stylesheet (this caused a black compass once).
+
+Pages takes 40–90 s to rebuild. Verify with:
+
+```bash
+curl -s https://nadersaedraji-code.github.io/na-app/app.js | grep APP_VERSION
+```
+
+## Architecture
+
+| File | Role |
+|---|---|
+| `index.html` | shell, versioned asset URLs |
+| `styles.css` | tokens + components (light/dark) |
+| `app.js` | state, views, sheets, onboarding, reminders |
+| `db.js` | IndexedDB, additive migrations, snapshots |
+| `prayertimes.js` | solar maths + Mawaqit preset lookup |
+| `cluj-times.js` | Masjid Cluj-Napoca 2026 timetable (Fajr, Shuruq, Dhuhr, Asr, Maghrib, Isha) |
+| `sync.js` | two-phone sync: queue, pull, push, pairing |
+| `sw.js` | service worker, code-only caching |
+| `server/sync.mjs` | local dev server + sync API (`/api/*`) |
+| `supabase/schema.sql` | cloud schema, not yet deployed |
+
+Data lives in IndexedDB (`na-app`), store per entity. Sync is wired and tested
+against the local server; the cloud project was never created.
+
+## Product decisions worth keeping (do not undo casually)
+
+- **Tone**: a quiet shared journal, not a productivity dashboard. No leaderboards,
+  no streaks that shame, no confetti, no chat (they use WhatsApp).
+- **Prayer times**: the mosque's own Mawaqit calendar, not a generic calculation.
+  Location preset `cluj`; 2026 table. Falls back to computed times for other years.
+- **Streaks**: a day counts only when all five prayers are *on time*. Today never
+  breaks a streak until the day ends.
+- **Weeks**: seven-day blocks from `settings.startDate` (16 Nov 2026), not calendar
+  weeks. Recap appears after a full block closes.
+- **Days before the start date** are locked in the calendar — never shown as misses.
+- **Goals**: main vs secondary, progress bars, confirmation at 100%, accomplished
+  shelf, editable and deletable with undo.
+- **Tasks**: three states — todo, partly done, done.
+- **Design**: blush paper `#F7EFF1`, white cards, deep rose `#B0325C`, serif
+  display type (ui-serif/New York), one dark anchor block per screen, gradient
+  rings, line icons in Settings (no emoji except avatars).
+- **Data safety**: migrations are additive only, snapshots before upgrade, soft
+  deletes with undo, `?fresh=1` clears code caches but never data.
+
+## Known limits
+
+1. **Push with the app closed does not exist.** Reminders fire while the app is
+   open or backgrounded. Real background push needs the cloud + VAPID.
+2. **Two-phone sync is not live.** Code and schema exist; it needs a Supabase
+   project (URL + anon key) and `mode: 'supabase'`.
+3. **Cluj timetable is 2026.** Refresh from Mawaqit each January.
+4. **iOS**: notifications require the installed home-screen app (16.4+).
+
+## If something looks broken
+
+- Wrong/old UI on a phone → open `…/na-app/?fresh=1` (clears code caches, keeps data).
+- Settings → **Check for updates** does the same thing.
+- Data export/import: Settings → Export a backup / Restore.
+- Version is printed at the bottom of Home.
+
+## Open ideas (not built)
+
+Shared "Together" list, qada (make-up prayers) counter, daily question for two,
+"on this day" memories, gratitude lines, mosque/jamaa toggle, shared goals,
+per-prayer push once the cloud is on.

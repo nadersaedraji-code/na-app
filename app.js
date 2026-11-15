@@ -10,9 +10,10 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.2.1';
 const LOCALE = 'en-GB';
 const RELEASES = [
+  { v: '1.2.1', at: '15 Nov 2026', notes: "Resetting now forgets everything, including the pairing code." },
   { v: '1.2.0', at: '15 Nov 2026', notes: "A home of your own, and a softer look throughout." },
   { v: '1.1.4', at: '15 Nov 2026', notes: "Reset clears the whole space, as it should." },
   { v: '1.1.3', at: '15 Nov 2026', notes: "Background updates without touching your data." },

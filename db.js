@@ -220,7 +220,7 @@ export async function wipeUserData() {
   for (const name of ['members', 'prayers', 'plan', 'reviews', 'reactions']) {
     await clear(name);
   }
-  for (const key of ['app', 'seeded', 'settings']) {
+  for (const key of ['app', 'seeded', 'settings', 'sync']) {
     await del('meta', key);
   }
 }

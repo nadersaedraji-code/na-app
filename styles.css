@@ -67,9 +67,9 @@
   --a:#B98BC9;
   --accent-strong:color-mix(in srgb, var(--accent) 58%, #5C3444);
 
-  --pink:#C9436F;
-  --pink-btn:#C43D69;
-  --pink-soft:#FBE1EA;
+  --pink:#B0325C;
+  --pink-btn:#A62A54;
+  --pink-soft:#F6D3DF;
 
   --block:#221A1E;
   --block-ink:#FFFFFF;
@@ -173,9 +173,9 @@ input,textarea,select{font:inherit;color:inherit;}
 [data-theme="light"] .mark i:last-child{mix-blend-mode:multiply;}
 .mark span{font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-3);margin-left:12px;font-weight:600;}
 
-.hello{padding:2px 2px 26px;}
+.hello{padding:2px 2px 18px;}
 .hello .eyebrow{font-size:12.5px;letter-spacing:.04em;color:var(--ink-3);}
-.hello h1{font-size:34px;line-height:1.08;letter-spacing:-.045em;font-weight:650;margin-top:9px;}
+.hello h1{font-size:23px;line-height:1.25;letter-spacing:-.03em;font-weight:600;margin-top:6px;}
 
 /* the duo card — the heart of home */
 .duo{position:relative;display:flex;align-items:stretch;overflow:hidden;padding:6px;}
@@ -222,6 +222,42 @@ input,textarea,select{font:inherit;color:inherit;}
 .tile .d{font-size:12px;color:var(--ink-3);margin-top:6px;line-height:1.45;}
 
 .quiet{text-align:center;font-size:12px;color:var(--ink-3);letter-spacing:.02em;margin-top:30px;line-height:1.7;}
+
+/* verse ------------------------------------------------------------ */
+.verse{margin:0;padding:30px 24px 24px;text-align:center;position:relative;overflow:hidden;}
+.verse::before{content:"";position:absolute;inset:0;background:radial-gradient(120% 100% at 50% 0%, color-mix(in srgb, var(--pink) 12%, transparent), transparent 72%);pointer-events:none;}
+.verse-label{font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--pink);font-weight:700;margin-bottom:16px;position:relative;}
+.verse p{font-family:ui-serif,Georgia,"Times New Roman",serif;font-size:20px;line-height:1.55;letter-spacing:-.006em;position:relative;color:var(--ink);}
+.verse-rule{width:30px;height:1px;background:var(--line-2);margin:20px auto 12px;}
+.verse-ref{font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3);font-weight:600;}
+
+/* comparison -------------------------------------------------------- */
+.compare{padding:4px 18px 14px;}
+.compare-head{display:grid;grid-template-columns:1fr 74px 74px;align-items:center;padding:14px 0 4px;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:600;}
+.compare-head span:not(:first-child){text-align:center;}
+.metric{display:grid;grid-template-columns:1fr 74px 74px;align-items:center;padding:11px 0;border-top:1px solid var(--line);}
+.metric .lab{font-size:14px;color:var(--ink-2);}
+.metric b{font-size:22px;font-weight:650;letter-spacing:-.045em;text-align:center;line-height:1;}
+
+.their-scores{display:flex;gap:9px;margin:14px 0;}
+.their-scores > div{flex:1;background:var(--day-bg);border-radius:15px;padding:12px 14px;display:flex;align-items:baseline;gap:4px;flex-wrap:wrap;}
+.their-scores span{width:100%;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);font-weight:600;}
+.their-scores b{font-size:24px;font-weight:650;letter-spacing:-.045em;line-height:1.1;}
+.their-scores i{font-size:11px;color:var(--ink-3);font-style:normal;}
+
+/* chart ------------------------------------------------------------- */
+.chart{width:100%;height:auto;display:block;margin-top:10px;overflow:visible;}
+.chart .grid{stroke:var(--line);stroke-width:1;}
+.chart .axis{fill:var(--ink-3);font-size:9px;text-anchor:end;font-family:var(--font);}
+.chart-legend{display:flex;gap:16px;font-size:12px;color:var(--ink-2);flex-wrap:wrap;}
+.chart-legend span{display:inline-flex;align-items:center;gap:6px;}
+.chart-legend b{color:var(--ink);font-weight:650;}
+.chart-legend .dot{width:8px;height:8px;border-radius:50%;display:block;}
+.chart-legend .h{background:var(--pink);}
+.chart-legend .p{background:var(--a);}
+.chart-x{display:flex;justify-content:space-between;font-size:10.5px;color:var(--ink-3);margin-top:8px;}
+.empty-note{font-size:13px;color:var(--ink-3);line-height:1.6;text-align:center;padding:10px 4px;}
+.empty-note b{display:block;color:var(--ink-2);font-size:14px;font-weight:600;margin-bottom:4px;}
 
 /* prayer --------------------------------------------------------- */
 .hero{
@@ -385,6 +421,12 @@ input,textarea,select{font:inherit;color:inherit;}
   transition:transform .15s var(--ease);
 }
 .add-task button:active{transform:scale(.94);}
+.add-task .time{
+  width:84px;flex:none;padding:0 6px;border-radius:16px;background:var(--card-flat);
+  font-size:12.5px;color:var(--ink-2);text-align:center;outline:none;border:0;
+  box-shadow:inset 0 0 0 1px var(--line);
+}
+.add-task .time:focus{box-shadow:inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 45%, transparent);}
 
 .empty{
   padding:32px 20px;text-align:center;color:var(--ink-3);font-size:14px;line-height:1.6;
@@ -624,6 +666,7 @@ input[type="range"]::-moz-range-thumb{width:24px;height:24px;border:0;border-rad
 .day-sheet .mini-list div{font-size:13.5px;color:var(--ink-2);display:flex;gap:8px;align-items:baseline;}
 .day-sheet .mini-list div.done{color:var(--ink-3);text-decoration:line-through;}
 .day-sheet .review-line{margin-top:11px;font-size:13.5px;color:var(--ink-2);line-height:1.6;}
+.day-label{display:block;margin:14px 0 4px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:600;}
 .day-sheet .scores{display:flex;gap:8px;margin-top:11px;}
 
 /* toast --------------------------------------------------------------- */

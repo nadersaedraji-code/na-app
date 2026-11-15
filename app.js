@@ -10,13 +10,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '1.5.0';
+const APP_VERSION = '1.6.0';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '1.6.0', at: '15 Nov 2026', notes: "Partner stats, a trend graph, optional task times, and a verse to open the day." },
   { v: '1.5.0', at: '15 Nov 2026', notes: "Deeper ink, crisp white cards on blush, one dark anchor block." },
   { v: '1.4.1', at: '15 Nov 2026', notes: "Existing devices move to the new palette; a visible version and a manual refresh." },
   { v: '1.4.0', at: '15 Nov 2026', notes: "Lighter, warmer, pinker — blush cream by day, soft plum by night." },
@@ -47,8 +48,36 @@ const STATUS_LABEL = {
   pending: 'Not logged',
 };
 
-const PALETTE = ['#E8749B', '#B98BC9', '#F0A48C', '#8FBFD9', '#9BC9AE', '#D9A0C2'];
+const PALETTE = ['#DE5A87', '#A87FC0', '#E08A6E', '#7FB3D0', '#84BFA3', '#C98FB8'];
 const AVATARS = ['🌙', '⭐', '🌿', '🌸', '☀️', '🕊️', '🍃', '🔥', '🌊'];
+
+/* A small, curated rotation. One verse a day, chosen by date. */
+const VERSES = [
+  { ref: '2:152', text: 'So remember Me; I will remember you. And be grateful to Me and do not deny Me.' },
+  { ref: '2:186', text: 'And when My servants ask you concerning Me — indeed I am near. I respond to the invocation of the supplicant when he calls upon Me.' },
+  { ref: '2:216', text: 'Perhaps you hate a thing and it is good for you; and perhaps you love a thing and it is bad for you. And Allah knows, while you know not.' },
+  { ref: '2:286', text: 'Allah does not charge a soul except with that within its capacity.' },
+  { ref: '3:139', text: 'And do not weaken and do not grieve, and you will be superior if you are believers.' },
+  { ref: '3:173', text: 'Sufficient for us is Allah, and He is the best Disposer of affairs.' },
+  { ref: '9:51', text: 'Never will we be struck except by what Allah has decreed for us; He is our protector. And upon Allah let the believers rely.' },
+  { ref: '13:28', text: 'Those who have believed and whose hearts are assured by the remembrance of Allah. Unquestionably, by the remembrance of Allah hearts are assured.' },
+  { ref: '14:7', text: 'If you are grateful, I will surely increase you in favour.' },
+  { ref: '20:114', text: 'My Lord, increase me in knowledge.' },
+  { ref: '29:69', text: 'And those who strive for Us — We will surely guide them to Our ways. And indeed, Allah is with the doers of good.' },
+  { ref: '39:53', text: 'Do not despair of the mercy of Allah. Indeed, Allah forgives all sins. Indeed, it is He who is the Forgiving, the Merciful.' },
+  { ref: '40:60', text: 'And your Lord says: call upon Me; I will respond to you.' },
+  { ref: '55:60', text: 'Is the reward for good anything but good?' },
+  { ref: '57:4', text: 'And He is with you wherever you are.' },
+  { ref: '65:3', text: 'And whoever relies upon Allah — then He is sufficient for him.' },
+  { ref: '94:5', text: 'For indeed, with hardship will be ease. Indeed, with hardship will be ease.' },
+  { ref: '2:153', text: 'O you who have believed, seek help through patience and prayer. Indeed, Allah is with the patient.' },
+  { ref: '16:97', text: 'Whoever does righteousness, whether male or female, while he is a believer — We will surely cause him to live a good life.' },
+  { ref: '49:13', text: 'Indeed, the most noble of you in the sight of Allah is the most righteous of you.' },
+  { ref: '93:5', text: 'And your Lord is going to give you, and you will be satisfied.' },
+  { ref: '41:30', text: 'Indeed, those who have said, “Our Lord is Allah,” and then remained on a right course — the angels descend upon them: do not fear and do not grieve.' },
+  { ref: '24:35', text: 'Allah is the Light of the heavens and the earth.' },
+  { ref: '2:255', text: 'His Throne encompasses the heavens and the earth, and their preservation tires Him not. And He is the Most High, the Most Great.' },
+];
 
 const DEFAULTS = {
   lat: 48.8566,
@@ -185,6 +214,29 @@ function greeting() {
   return 'Good night';
 }
 
+const dayOfYear = (d = new Date()) =>
+  Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 86400000);
+
+function verseCard() {
+  const v = VERSES[dayOfYear() % VERSES.length];
+  return `
+    <section class="verse card">
+      <div class="verse-label">Verse for today</div>
+      <p>${esc(v.text)}</p>
+      <div class="verse-rule"></div>
+      <div class="verse-ref">Qur’an ${v.ref}</div>
+    </section>`;
+}
+
+/** Calculations begin on this date. Set at onboarding, editable in Settings. */
+const statsStart = () => S.settings.startDate || dayKey();
+
+async function ensureStartDate() {
+  if (S.settings.startDate) return;
+  S.settings.startDate = dayKey(addDays(new Date(), 1));
+  await db.put('meta', { key: 'settings', value: S.settings });
+}
+
 /* ---------- state access ---------- */
 const memberById = (id) => S.members.find((m) => m.id === id) || null;
 const me = () => memberById(S.viewerId);
@@ -266,6 +318,7 @@ async function boot() {
     await db.ensureSchema();
     await loadState();
     await migrateTheme();
+    await ensureStartDate();
     db.setHooks({
       onWrite: (store, rec) => sync.queueWrite(store, rec),
       onDelete: (store, id) => sync.queueDelete(store, id),
@@ -449,7 +502,7 @@ async function completeOnboarding(solo) {
 
   await db.putMany('members', members);
   const loc = detectLocation();
-  const firstSettings = { ...DEFAULTS, ...loc, notif: { ...DEFAULTS.notif } };
+  const firstSettings = { ...DEFAULTS, ...loc, notif: { ...DEFAULTS.notif }, startDate: dayKey(addDays(new Date(), 1)) };
   await db.put('meta', { key: 'settings', value: firstSettings });
   await db.saveMeta('app', { viewerId: meId, schemaVersion: db.SCHEMA_VERSION });
   if (SEED_SAMPLE) {
@@ -673,8 +726,10 @@ function viewHome() {
 
     <div class="hello">
       <div class="eyebrow">${dateLine}</div>
-      <h1>${greeting()},<br>${esc(who.name)}</h1>
+      <h1>${greeting()}, ${esc(who.name)}</h1>
     </div>
+
+    ${verseCard()}
 
     <section class="duo card">
       ${side(who, true)}
@@ -708,7 +763,6 @@ function viewHome() {
     <p class="quiet">A quiet place for two · v${APP_VERSION}</p>
   `;
 }
-
 /* ============================================================
    View — Prayer
    ============================================================ */
@@ -873,6 +927,7 @@ function viewPlan() {
     ${editable ? `
       <form class="add-task" data-form="add-task">
         <input name="title" placeholder="Add something to today…" maxlength="120" autocomplete="off">
+        <input class="time" type="time" name="time" aria-label="Optional time" title="Optional time">
         <button type="submit" aria-label="Add task">+</button>
       </form>` : ''}
 
@@ -912,6 +967,25 @@ function viewReview() {
   const theirs = p ? reviewFor(p.id, today) : null;
   const saved = !!mine;
 
+  const metric = (label, a, b) => `
+    <div class="metric">
+      <span class="lab">${label}</span>
+      <b class="num">${a ?? '–'}</b>
+      <b class="num">${b ?? '–'}</b>
+    </div>`;
+
+  const compare = p ? `
+    <div class="card compare">
+      <div class="compare-head">
+        <span></span>
+        <span class="you">You</span>
+        <span class="them">${esc(p.name)}</span>
+      </div>
+      ${metric('Productivity', mine?.productivity, theirs?.productivity)}
+      ${metric('Happiness', mine?.happiness, theirs?.happiness)}
+    </div>
+    <div style="height:14px"></div>` : '';
+
   return `
     <header class="head">
       <div>
@@ -920,6 +994,8 @@ function viewReview() {
         <div class="sub">Two numbers and a sentence. That's enough.</div>
       </div>
     </header>
+
+    ${compare}
 
     <form class="card card-pad" data-form="save-review">
       <div class="field">
@@ -963,10 +1039,10 @@ function viewReview() {
               <div style="font-size:12px;color:var(--ink-3)">logged ${new Date(theirs.updatedAt).toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' })}</div>
             </div>
           </div>
-          ${theirs.wins ? `<div style="font-size:14.5px;line-height:1.55;color:var(--ink-2);margin-bottom:14px">${esc(theirs.wins)}</div>` : ''}
-          <div class="rating-row">
-            <div class="chip">Productivity <b style="color:var(--ink)">${theirs.productivity ?? '–'}</b></div>
-            <div class="chip">Happiness <b style="color:var(--ink)">${theirs.happiness ?? '–'}</b></div>
+          ${theirs.wins ? `<div style="font-size:14.5px;line-height:1.6;color:var(--ink-2);margin-bottom:14px">${esc(theirs.wins)}</div>` : ''}
+          <div class="their-scores">
+            <div><span>Productivity</span><b class="num">${theirs.productivity ?? '–'}</b><i>/10</i></div>
+            <div><span>Happiness</span><b class="num">${theirs.happiness ?? '–'}</b><i>/10</i></div>
           </div>
           ${theirs.highlight ? `<div style="font-size:13.5px;color:var(--ink-3);margin-top:12px">“${esc(theirs.highlight)}”</div>` : ''}
           <div style="display:flex;gap:8px;margin-top:16px">
@@ -988,6 +1064,101 @@ function noteBlock(review, fromMember, toMember) {
       <input class="line" name="note" placeholder="Leave ${esc(toMember.name)} a word…" maxlength="140">
       <button class="btn wide" type="submit" style="margin-top:8px">Send</button>
     </form>`;
+}
+
+function trendPoints(days = 30) {
+  const out = [];
+  const start = statsStart();
+  for (let i = days - 1; i >= 0; i--) {
+    const k = dayKey(addDays(new Date(), -i));
+    if (k < start) continue;
+    let h = 0, hn = 0, p = 0, pn = 0;
+    for (const m of S.members) {
+      const r = reviewFor(m.id, k);
+      if (!r) continue;
+      if (Number.isFinite(r.happiness)) { h += r.happiness; hn++; }
+      if (Number.isFinite(r.productivity)) { p += r.productivity; pn++; }
+    }
+    if (hn || pn) out.push({ k, h: hn ? h / hn : null, p: pn ? p / pn : null });
+  }
+  return out;
+}
+
+function smoothPath(points) {
+  if (!points.length) return '';
+  if (points.length === 1) return `M${points[0][0]},${points[0][1]}`;
+  let d = `M${points[0][0].toFixed(1)},${points[0][1].toFixed(1)}`;
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[i - 1] || points[i];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[i + 2] || p2;
+    const c1x = p1[0] + (p2[0] - p0[0]) / 6;
+    const c1y = p1[1] + (p2[1] - p0[1]) / 6;
+    const c2x = p2[0] - (p3[0] - p1[0]) / 6;
+    const c2y = p2[1] - (p3[1] - p1[1]) / 6;
+    d += ` C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
+  }
+  return d;
+}
+
+function trendCard() {
+  const start = statsStart();
+  const pretty = (k) => parseDay(k).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' });
+
+  if (start > dayKey()) {
+    return `<div class="card card-pad">
+      <div class="empty-note"><b>Counting starts ${pretty(start)}</b>Today still works — it just isn't averaged until tomorrow.</div>
+    </div>`;
+  }
+
+  const pts = trendPoints(30);
+  if (pts.length < 2) {
+    return `<div class="card card-pad">
+      <div class="empty-note"><b>The lines begin tonight</b>Save a review and tomorrow's graph will have its first point.</div>
+    </div>`;
+  }
+
+  const W = 340, H = 148, padL = 24, padR = 10, padT = 12, padB = 22;
+  const iw = W - padL - padR, ih = H - padT - padB;
+  const n = pts.length;
+  const x = (i) => padL + (n === 1 ? iw / 2 : (i * iw) / (n - 1));
+  const y = (v) => padT + ih - (v / 10) * ih;
+
+  const series = (key) => pts.map((pt, i) => (pt[key] == null ? null : [x(i), y(pt[key])])).filter(Boolean);
+  const hp = series('h');
+  const pp = series('p');
+
+  const grid = [0, 5, 10].map((v) =>
+    `<line class="grid" x1="${padL}" x2="${W - padR}" y1="${y(v)}" y2="${y(v)}"/>
+     <text class="axis" x="${padL - 7}" y="${y(v) + 3.5}">${v}</text>`).join('');
+
+  const draw = (points, color) => {
+    if (points.length < 2) return '';
+    const d = smoothPath(points);
+    const last = points[points.length - 1];
+    return `<path d="${d} L${last[0].toFixed(1)},${padT + ih} L${points[0][0].toFixed(1)},${padT + ih} Z" fill="${color}" opacity=".09"/>
+      <path d="${d}" fill="none" stroke="${color}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="3" fill="${color}" stroke="var(--bg-soft)" stroke-width="2"/>`;
+  };
+
+  const avg = (key) => {
+    const v = pts.map((p) => p[key]).filter((v2) => v2 != null);
+    return v.length ? (v.reduce((a, b) => a + b, 0) / v.length).toFixed(1) : '–';
+  };
+
+  return `<div class="card card-pad">
+    <div class="chart-legend">
+      <span><i class="dot h"></i>Happiness <b class="num">${avg('h')}</b></span>
+      <span><i class="dot p"></i>Productivity <b class="num">${avg('p')}</b></span>
+    </div>
+    <svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Happiness and productivity over time">
+      ${grid}
+      ${draw(pp, 'var(--a)')}
+      ${draw(hp, 'var(--pink)')}
+    </svg>
+    <div class="chart-x"><span>${pretty(pts[0].k)}</span><span>${pretty(pts[pts.length - 1].k)}</span></div>
+  </div>`;
 }
 
 /* ============================================================
@@ -1027,6 +1198,9 @@ function viewUs() {
       </div>
     </div>
 
+    <div class="section-title">Trends <span class="link">last 30 days</span></div>
+    ${trendCard()}
+
     <div class="section-title">Calendar <span class="link">tap any day</span></div>
     <div class="card card-pad">${cal}</div>
 
@@ -1053,12 +1227,14 @@ function monthStats(base) {
   const m = base.getMonth();
   const lastDay = new Date(y, m + 1, 0).getDate();
   const today = new Date();
+  const start = statsStart();
   let pOk = 0, pTot = 0, tDone = 0, tTot = 0, hap = 0, hapN = 0, prod = 0, prodN = 0, days = 0;
 
   for (let d = 1; d <= lastDay; d++) {
     const dt = new Date(y, m, d);
     if (dt > today) break;
     const day = dayKey(dt);
+    if (day < start) continue;
     let recorded = false;
     for (const mem of S.members) {
       for (const k of PRAYER_ORDER) {
@@ -1205,6 +1381,7 @@ function viewSettings() {
     </div>
 
     <div class="group">
+      ${row('start-date', '📅', 'Counting from', new Date(parseDay(statsStart())).toLocaleDateString(LOCALE, { day: 'numeric', month: 'long', year: 'numeric' }))}
       ${row('check-updates', '↻', 'Check for updates', 'Reload the newest build', `v${APP_VERSION}`)}
       ${row('about', 'ⓘ', 'What\'s new', latest.notes, `v${latest.v}`)}
     </div>
@@ -1436,7 +1613,8 @@ function sheetDay(day) {
             <span class="chip">Productivity <b style="color:var(--ink)">${rv.productivity ?? '–'}</b></span>
             <span class="chip">Happiness <b style="color:var(--ink)">${rv.happiness ?? '–'}</b></span>
           </div>
-          ${rv.wins ? `<div class="review-line">${esc(rv.wins)}</div>` : ''}
+          ${rv.wins ? `<span class="day-label">Accomplished</span><div class="review-line">${esc(rv.wins)}</div>` : ''}
+          ${rv.highlight ? `<span class="day-label" style="margin-top:12px">Moment</span><div class="review-line" style="font-style:italic">“${esc(rv.highlight)}”</div>` : ''}
           ${(rv.notes || []).map((n) => `<div class="note-from" style="margin-top:10px"><span class="av">💬</span><span>${esc(n.text)}</span></div>`).join('')}
         ` : `<div class="review-line" style="color:var(--ink-3)">No review that day.</div>`}
       </div>`;
@@ -1553,6 +1731,18 @@ function sheetLocation() {
         <div style="flex:1"><div class="label">Longitude</div><input class="line num" name="lng" value="${S.settings.lng}" inputmode="decimal"></div>
       </div>
       <button class="btn primary wide" type="submit" style="margin-top:14px">Save</button>
+    </form>
+  `);
+}
+
+function sheetStartDate() {
+  openSheet(`
+    <div class="grip"></div>
+    <h3>Counting from</h3>
+    <p class="sheet-sub">Days before this date are left out of your averages and the graph. Change it any time.</p>
+    <form data-form="save-start">
+      <input class="line" type="date" name="start" value="${statsStart()}">
+      <button class="btn primary wide" type="submit" style="margin-top:12px">Save</button>
     </form>
   `);
 }
@@ -1845,6 +2035,7 @@ const ACTIONS = {
 
   method: () => sheetMethod(),
   location: () => sheetLocation(),
+  'start-date': () => sheetStartDate(),
   'times-today': () => sheetTimes(),
 
   theme: async (el) => {
@@ -2037,7 +2228,7 @@ document.addEventListener('submit', async (e) => {
       memberId: who.id,
       day: dayKey(),
       title,
-      timeLabel: '',
+      timeLabel: String(data.time || '').trim(),
       priority: 'normal',
       done: false,
       doneAt: null,
@@ -2108,6 +2299,17 @@ document.addEventListener('submit', async (e) => {
     await db.put('members', m);
     closeSheet();
     refresh();
+    return;
+  }
+
+  if (kind === 'save-start') {
+    const v = String(data.start || '').trim();
+    if (!v) return;
+    S.settings.startDate = v;
+    await db.put('meta', { key: 'settings', value: S.settings });
+    closeSheet();
+    refresh();
+    toast(`Counting from ${v}`);
     return;
   }
 

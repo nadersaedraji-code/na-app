@@ -507,8 +507,7 @@ input[type="range"]::-moz-range-thumb{width:24px;height:24px;border:0;border-rad
 [data-theme="light"] .cal-nav button{background:rgba(23,24,28,.05);}
 .cal-nav button:active{transform:scale(.94);}
 .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;}
-.cal .dow{text-align:center;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);font-weight:600;padding-bottom:3px;}
-.day{
+.cal .dow{text-align:center;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);font-weight:600;padding-bottom:3px;}.day{
   position:relative;aspect-ratio:1/1.06;border-radius:12px;background:var(--day-bg);
   display:flex;flex-direction:column;align-items:center;padding:6px 4px 5px;gap:3px;
   transition:all .2s var(--ease);
@@ -522,6 +521,10 @@ input[type="range"]::-moz-range-thumb{width:24px;height:24px;border:0;border-rad
 [data-theme="light"] .day .marks i{background:rgba(23,24,28,.08);}
 .day .marks i b{display:block;height:100%;width:0;border-radius:99px;transition:width .5s var(--ease);}
 .day:active{transform:scale(1.05);}
+.day[disabled]{cursor:default;}
+.day[disabled]:active{transform:none;}
+.cal-note{font-size:11.5px;color:var(--ink-3);text-align:center;margin-top:14px;line-height:1.6;}
+.notice{margin-top:14px;padding:12px 14px;border-radius:14px;background:var(--day-bg);font-size:12.5px;color:var(--ink-3);line-height:1.55;text-align:center;}
 
 .legend{display:flex;gap:16px;align-items:center;margin-top:16px;font-size:11.5px;color:var(--ink-3);flex-wrap:wrap;}
 .legend span{display:inline-flex;align-items:center;gap:7px;}

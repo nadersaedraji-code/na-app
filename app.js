@@ -10,13 +10,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '1.6.0';
+const APP_VERSION = '1.6.1';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '1.6.1', at: '15 Nov 2026', notes: "Days before your start date can't be opened — no empty history to misread." },
   { v: '1.6.0', at: '15 Nov 2026', notes: "Partner stats, a trend graph, optional task times, and a verse to open the day." },
   { v: '1.5.0', at: '15 Nov 2026', notes: "Deeper ink, crisp white cards on blush, one dark anchor block." },
   { v: '1.4.1', at: '15 Nov 2026', notes: "Existing devices move to the new palette; a visible version and a manual refresh." },
@@ -855,6 +856,8 @@ function viewPrayer() {
 
     <div class="prayers stagger">${rows}</div>
 
+    ${dayKey() < statsStart() ? `<div class="notice">Counting begins ${parseDay(statsStart()).toLocaleDateString(LOCALE, { day: 'numeric', month: 'long' })} — today is yours, it just isn't averaged yet.</div>` : ''}
+
     <div class="section-title">${p ? 'Side by side' : 'Your partner'}</div>
     ${partnerCard}
 
@@ -1271,6 +1274,7 @@ function calendarHTML(base, a, b) {
   const daysInMonth = new Date(y, m + 1, 0).getDate();
   const rows = Math.ceil((offset + daysInMonth) / 7);
   const today = dayKey();
+  const start = statsStart();
 
   const dows = ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d) => `<span class="dow">${d}</span>`).join('');
 
@@ -1283,12 +1287,14 @@ function calendarHTML(base, a, b) {
     }
     const dt = new Date(y, m, dnum);
     const k = dayKey(dt);
-    const future = dt > new Date();
+    // Nothing before the start date, nothing in the future.
+    const inactive = k < start || dt > new Date();
     const marks = [a, b].filter(Boolean).map((mem) => {
       const n = prayerCount(mem.id, k);
       return `<i><b style="width:${(n / 5) * 100}%;background:${mem.color}"></b></i>`;
     }).join('');
-    cells += `<button class="day ${k === today ? 'today' : ''} ${future ? 'other' : ''}" data-act="day" data-day="${k}" ${future ? 'disabled' : ''}>
+    cells += `<button class="day ${k === today && !inactive ? 'today' : ''} ${inactive ? 'other' : ''}"
+      data-act="day" data-day="${k}" ${inactive ? 'disabled aria-disabled="true"' : ''}>
       <span class="n num">${dnum}</span>
       <span class="marks">${marks}</span>
     </button>`;
@@ -1302,7 +1308,8 @@ function calendarHTML(base, a, b) {
         <button data-act="cal-move" data-d="1" aria-label="Next month">›</button>
       </div>
     </div>
-    <div class="cal">${dows}${cells}</div>`;
+    <div class="cal">${dows}${cells}</div>
+    ${start > today ? `<div class="cal-note">Your days begin ${parseDay(start).toLocaleDateString(LOCALE, { day: 'numeric', month: 'long' })}.</div>` : ''}`;
 }
 
 /* ============================================================

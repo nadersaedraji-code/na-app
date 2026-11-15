@@ -10,13 +10,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '2.4.0';
+const APP_VERSION = '2.4.1';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '2.4.1', at: '16 Nov 2026', notes: "A test button that fires the urgent Isha notification." },
   { v: '2.4.0', at: '15 Nov 2026', notes: "Reminders per prayer, with an urgent warning before the window closes." },
   { v: '2.3.0', at: '15 Nov 2026', notes: "The Qibla dial carries the Kaaba at its true direction." },
   { v: '2.2.2', at: '15 Nov 2026', notes: "The compass follows one sensor stream and paints once per frame." },
@@ -2720,6 +2721,10 @@ function sheetPrayerNotifs() {
         <span class="lbl">Warn me before<span class="sub">Minutes before the window closes</span></span>
         <span class="v" style="font-size:13px;color:var(--ink-3)">${n.lead || 20} min</span>
       </button>
+      <button class="sheet-opt" data-act="test-notif">
+        <span class="lbl">Send a test notification<span class="sub">Isha · the urgent style, right now</span></span>
+        <span class="v" style="font-size:13px;color:var(--pink);font-weight:600">Send</span>
+      </button>
     </div>
     <p class="q-note">Alerts arrive while the app is open or in the background. Alerts with the app fully closed need the cloud switch-on.</p>
   `);
@@ -2913,6 +2918,20 @@ const ACTIONS = {
     const v = el.querySelector('.v');
     if (v) v.textContent = `${next} min`;
     haptic(6);
+  },
+
+  'test-notif': async () => {
+    if (!('Notification' in window)) return toast('This browser has no notifications');
+    let perm = Notification.permission;
+    if (perm === 'default') perm = await Notification.requestPermission();
+    if (perm !== 'granted') return toast('Notifications are blocked — allow them in your browser settings');
+    haptic(20);
+    await notify(
+      'Isha ends soon',
+      'Still unlogged — pray before the window closes. (test)',
+      `test-${Date.now()}`
+    );
+    toast('Sent — check your notification shade');
   },
 
   'qibla-permission': async () => {

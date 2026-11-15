@@ -5,13 +5,15 @@
    ============================================================ */
 
 import * as db from './db.js';
+import * as sync from './sync.js';
 import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '1.1.4';
+const APP_VERSION = '1.2.0';
 const LOCALE = 'en-GB';
 const RELEASES = [
+  { v: '1.2.0', at: '15 Nov 2026', notes: "A home of your own, and a softer look throughout." },
   { v: '1.1.4', at: '15 Nov 2026', notes: "Reset clears the whole space, as it should." },
   { v: '1.1.3', at: '15 Nov 2026', notes: "Background updates without touching your data." },
   { v: '1.1.2', at: '15 Nov 2026', notes: "Quieter first launch and reliable background updates." },
@@ -137,11 +139,14 @@ const S = {
   settings: { ...DEFAULTS },
   viewerId: null,
   viewingAs: null,
-  view: 'prayer',
+  view: 'home',
   planTab: 'mine',
   calMonth: null,
   scroll: {},
   justLogged: null,
+  syncState: 'off',
+  suppressAnim: false,
+  pendingRemote: false,
   ready: false,
 };
 
@@ -251,6 +256,12 @@ async function boot() {
   try {
     await db.ensureSchema();
     await loadState();
+    db.setHooks({
+      onWrite: (store, rec) => sync.queueWrite(store, rec),
+      onDelete: (store, id) => sync.queueDelete(store, id),
+    });
+    sync.attach({ onChange: onRemoteChange, onStatus: (s) => { S.syncState = s; } });
+    await sync.load();
   } catch (err) {
     console.error(err);
     toast('Could not open local storage');
@@ -260,6 +271,10 @@ async function boot() {
     renderOnboarding();
   } else {
     showApp();
+    if (sync.isOn()) {
+      sync.startPolling();
+      sync.pull();
+    }
   }
 
   mountInstallPrompt();
@@ -316,7 +331,9 @@ function renderOnboarding() {
 
   root.innerHTML = `
     <div class="onboard-inner">
-      <div class="wordmark">N&amp;A</div>
+      <div style="display:flex;justify-content:center;margin-bottom:44px">
+        <div class="mark"><i></i><i></i><span>N &amp; A</span></div>
+      </div>
       <div class="dot-row" id="ob-dots">
         <i class="on"></i><i></i><i></i>
       </div>
@@ -537,11 +554,11 @@ async function seedSample(members) {
    Render
    ============================================================ */
 const TABS = [
+  { id: 'home', label: 'Home', icon: '<path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4.4v-6H9.4v6H5a1 1 0 0 1-1-1Z"/>' },
   { id: 'prayer', label: 'Prayer', icon: '<path d="M21 12.8A8.6 8.6 0 1 1 11.2 3a6.8 6.8 0 0 0 9.8 9.8Z"/>' },
   { id: 'plan', label: 'Plan', icon: '<path d="M9 6h11M9 12h11M9 18h11"/><path d="M4.5 6h.01M4.5 12h.01M4.5 18h.01"/>' },
   { id: 'review', label: 'Review', icon: '<path d="M12 20h9"/><path d="M16.6 3.4a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>' },
   { id: 'us', label: 'Us', icon: '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 1 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/>' },
-  { id: 'settings', label: 'Settings', icon: '<path d="M4 7h4M12 7h8M4 17h10M18 17h2"/><circle cx="9" cy="7" r="2"/><circle cx="15" cy="17" r="2"/>' },
 ];
 
 function renderTabs() {
@@ -562,7 +579,7 @@ function render() {
     : '';
   scr.style.setProperty('--accent', actor()?.color || '#8AA7FF');
   document.documentElement.style.setProperty('--accent', actor()?.color || '#8AA7FF');
-  scr.innerHTML = banner + `<div class="view">${VIEWS[S.view]()}</div>`;
+  scr.innerHTML = banner + `<div class="view${S.suppressAnim ? ' no-anim' : ''}">${VIEWS[S.view]()}</div>`;
   renderTabs();
 }
 
@@ -577,6 +594,94 @@ function go(view) {
   S.view = view;
   render();
   requestAnimationFrame(() => window.scrollTo(0, S.scroll[view] || 0));
+}
+
+/* ============================================================
+   View — Home
+   ============================================================ */
+function viewHome() {
+  const who = actor();
+  if (!who) return '';
+  const p = other(who);
+  const today = dayKey();
+  const t = times(today);
+  const np = nextPrayer(t);
+  const dateLine = new Date().toLocaleDateString(LOCALE, { weekday: 'long', day: 'numeric', month: 'long' });
+
+  const side = (m, isMe) => {
+    const count = prayerCount(m.id, today);
+    const plan = planFor(m.id, today);
+    const done = plan.filter((x) => x.done).length;
+    const review = reviewFor(m.id, today);
+    const dots = PRAYER_ORDER.map((k) => {
+      const r = getPrayer(m.id, today, k);
+      return `<i class="${r?.status || ''}"></i>`;
+    }).join('');
+    return `
+      <div class="duo-side" style="--tint:${m.color}">
+        <div class="duo-top"><span class="av">${m.avatar}</span><span class="nm">${isMe ? 'You' : esc(m.name)}</span></div>
+        <div class="score"><b class="num">${count}</b><span class="num">/5</span></div>
+        <div class="duo-dots">${dots}</div>
+        <div class="duo-sub">${plan.length ? `${done} of ${plan.length} done` : 'Nothing planned'}${review ? ` · ${review.productivity}/10` : ''}</div>
+      </div>`;
+  };
+
+  const partnerSide = p
+    ? side(p, false)
+    : `<div class="duo-side" style="--tint:var(--a)">
+        <div class="duo-top"><span class="av">＋</span><span class="nm">Their side</span></div>
+        <div class="pending-name">Connect the second phone and their day appears here.</div>
+      </div>`;
+
+  const myPlan = planFor(who.id, today);
+  const myDone = myPlan.filter((x) => x.done).length;
+  const myReview = reviewFor(who.id, today);
+  const theirsReview = p ? reviewFor(p.id, today) : null;
+
+  return `
+    <header class="home-head">
+      <div class="mark"><i></i><i></i><span>N &amp; A</span></div>
+      <button class="icon-btn" data-act="open-settings" aria-label="Settings">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 7h5M13 7h7M4 17h9M17 17h3"/><circle cx="11" cy="7" r="2"/><circle cx="15" cy="17" r="2"/>
+        </svg>
+      </button>
+    </header>
+
+    <div class="hello">
+      <div class="eyebrow">${dateLine}</div>
+      <h1>${greeting()},<br>${esc(who.name)}</h1>
+    </div>
+
+    <section class="duo card">
+      ${side(who, true)}
+      ${partnerSide}
+    </section>
+
+    <div class="next">
+      <span class="dot"></span>
+      <div>
+        <div class="label">${np.tomorrow ? 'Tomorrow' : 'Next'}</div>
+        <div class="who">${PMETA[np.key].name} <span class="num">${fmtTime(np.at)}</span></div>
+      </div>
+      <div class="in num">in <b>${fmtCountdown(np.at - new Date())}</b></div>
+    </div>
+
+    <div class="tiles">
+      <button class="tile" data-act="tab" data-view="plan">
+        <div class="k">Plan</div>
+        <div class="v num">${myDone}<small> / ${myPlan.length}</small></div>
+        <div class="d">${myPlan.length - myDone > 0 ? `${myPlan.length - myDone} left today` : 'All clear'}</div>
+      </button>
+      <button class="tile" data-act="tab" data-view="review">
+        <div class="k">Review</div>
+        <div class="v num">${myReview ? `${myReview.productivity}<small> · </small>${myReview.happiness}` : '—'}</div>
+        <div class="d">${myReview ? 'Today is kept' : theirsReview ? `${esc(p.name)} logged theirs` : 'Close the day tonight'}</div>
+      </button>
+    </div>
+
+    <p class="quiet">A quiet place for two.</p>
+  `;
 }
 
 /* ============================================================
@@ -1026,8 +1131,9 @@ function viewSettings() {
   return `
     <header class="head">
       <div>
-        <div class="eyebrow">Version ${APP_VERSION} · ${latest.at}</div>
-        <h1>Settings</h1>
+        <button class="crumb" data-act="tab" data-view="home">‹ Home</button>
+        <h1 style="margin-top:12px">Settings</h1>
+        <div class="sub">Version ${APP_VERSION} · ${latest.at}</div>
       </div>
     </header>
 
@@ -1038,8 +1144,8 @@ function viewSettings() {
     </div>
 
     <div class="group">
-      ${p ? row('edit-partner', '💞', 'Partner', `${esc(p.name)} · joined ${new Date(p.joinedAt).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' })}`)
-          : row('invite', '💞', 'Invite your partner', 'Connect the second phone')}
+      ${p ? row('edit-partner', '💞', 'Partner', `${esc(p.name)} · joined ${new Date(p.joinedAt).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' })}`) : ''}
+      ${row('sync', sync.isOn() ? '🔗' : '📡', sync.isOn() ? 'Two phones connected' : 'Connect the other phone', syncLine())}
       ${p ? row('preview', isPreview() ? '↩' : '👁', isPreview() ? 'Exit partner view' : 'Preview as ' + esc(p.name), 'See the app from their side') : ''}
     </div>
 
@@ -1082,6 +1188,99 @@ function viewSettings() {
       Local-first · your days stay on your devices
     </p>
   `;
+}
+
+/* ============================================================
+   Together — pairing, remote merges, member reconciliation
+   ============================================================ */
+function makeKey() {
+  const abc = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  const bytes = crypto.getRandomValues(new Uint8Array(20));
+  const body = Array.from(bytes, (b) => abc[b % abc.length]).join('');
+  return `NA-${body.slice(0, 4)}-${body.slice(4, 8)}-${body.slice(8, 12)}-${body.slice(12, 16)}-${body.slice(16, 20)}`;
+}
+
+async function createSharedSpace() {
+  if (!(await sync.probe())) {
+    closeSheet();
+    return toast('Cloud sync is not set up yet — ask me to finish it');
+  }
+  const key = makeKey();
+  await sync.setConfig({ mode: 'local', key });
+  closeSheet();
+  toast('Creating your space…');
+  await sync.begin(me());
+  await loadState();
+  refresh();
+  setTimeout(() => sheetSync(), 500);
+}
+
+async function joinSharedSpace(code) {
+  if (!(await sync.probe())) return toast('Cloud sync is not set up yet — ask me to finish it');
+  await sync.setConfig({ mode: 'local', key: code });
+  toast('Joining…');
+  await sync.begin(me());
+  await loadState();
+  await reconcileMembers();
+  S.suppressAnim = true;
+  refresh();
+  S.suppressAnim = false;
+  toast('Connected');
+}
+
+function onRemoteChange() {
+  const el = document.activeElement;
+  if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) {
+    S.pendingRemote = true;
+    return;
+  }
+  applyRemoteChange();
+}
+
+async function applyRemoteChange() {
+  S.pendingRemote = false;
+  await loadState();
+  await reconcileMembers();
+  S.suppressAnim = true;
+  refresh();
+  S.suppressAnim = false;
+}
+
+/** Keep exactly two members: me, and the real other half.
+    A member that came from the server always beats a local placeholder,
+    no matter which one was created more recently. */
+async function reconcileMembers() {
+  const others = S.members.filter((m) => m.id !== S.viewerId);
+  if (others.length <= 1) return;
+
+  const remote = others.filter((m) => m.remote);
+  const pool = remote.length ? remote : others;
+  pool.sort((a, b) => (b.updatedAt || b.joinedAt || 0) - (a.updatedAt || a.joinedAt || 0));
+  const keep = pool[0];
+
+  for (const m of others) {
+    if (m.id !== keep.id) await retireMember(m.id);
+  }
+}
+
+/** Remove a placeholder member and everything that belonged to it. */
+async function retireMember(id) {
+  await db.mute(async () => {
+    for (const store of ['prayers', 'plan', 'reviews']) {
+      for (const row of await db.getAll(store)) {
+        if (row.memberId === id) await db.del(store, row.id);
+      }
+    }
+    for (const row of await db.getAll('reactions')) {
+      if (row.from === id) await db.del('reactions', row.id);
+    }
+    await db.del('members', id);
+  });
+  S.members = S.members.filter((m) => m.id !== id);
+  S.prayers = S.prayers.filter((r) => r.memberId !== id);
+  S.plan = S.plan.filter((r) => r.memberId !== id);
+  S.reviews = S.reviews.filter((r) => r.memberId !== id);
+  S.reactions = S.reactions.filter((r) => r.from !== id);
 }
 
 /* ============================================================
@@ -1389,28 +1588,60 @@ function sheetInstall() {
   `);
 }
 
-function sheetInvite() {
-  const p = other(me());
+function sheetSync() {
+  if (!sync.isOn()) {
+    openSheet(`
+      <div class="grip"></div>
+      <h3>Two phones, one life</h3>
+      <p class="sheet-sub">Start here, then enter the code on the other phone. Everything stays between the two of you.</p>
+      <div class="sheet-list">
+        <button class="sheet-opt" data-act="sync-create">
+          <span class="sw" style="background:var(--ok)"></span>
+          <span class="lbl">Start a shared space<span class="sub">Creates a code for your partner</span></span>
+        </button>
+        <button class="sheet-opt" data-act="sync-join">
+          <span class="sw" style="background:var(--n)"></span>
+          <span class="lbl">I have a code<span class="sub">Join the space your partner started</span></span>
+        </button>
+        <button class="sheet-opt cancel" data-act="close">Close</button>
+      </div>
+    `);
+    return;
+  }
+
+  const key = sync.config().key;
   openSheet(`
     <div class="grip"></div>
-    <h3>Invite ${esc(p?.name || 'your partner')}</h3>
-    <p class="sheet-sub">This space lives on your device right now. Connecting two phones for real needs the cloud piece — everything around it is built and waiting.</p>
-    <div class="sheet-list">
-      <div class="sheet-opt" style="cursor:default">
-        <span class="sw" style="background:var(--ok)"></span>
-        <span class="lbl">Live sync<span class="sub">Their prayers and plans appear within seconds</span></span>
-      </div>
-      <div class="sheet-opt" style="cursor:default">
-        <span class="sw" style="background:var(--n)"></span>
-        <span class="lbl">One invite code<span class="sub">Single use, expires in 24 hours</span></span>
-      </div>
-      <div class="sheet-opt" style="cursor:default">
-        <span class="sw" style="background:var(--late)"></span>
-        <span class="lbl">Not connected yet<span class="sub">Ask me to switch on cloud sync</span></span>
-      </div>
-      <button class="sheet-opt cancel" data-act="close">Close</button>
-    </div>
+    <h3>Connected</h3>
+    <p class="sheet-sub">${syncLine()}</p>
+    <div class="card card-pad" style="text-align:center;font-size:15px;letter-spacing:.06em;line-height:1.6">${esc(key)}</div>
+    <button class="btn wide" style="margin-top:12px" data-act="copy-key">Copy the code</button>
+    <p style="font-size:12.5px;color:var(--ink-3);line-height:1.65;margin:14px 0 0">
+      On the other phone: Settings → Connect the other phone → I have a code.
+    </p>
+    <button class="sheet-opt cancel" data-act="sync-stop" style="margin-top:14px">Stop syncing on this phone</button>
   `);
+}
+
+function sheetJoin() {
+  openSheet(`
+    <div class="grip"></div>
+    <h3>Enter the code</h3>
+    <p class="sheet-sub">It looks like NA-XXXX-… and lives in Settings on the other phone.</p>
+    <form data-form="join-space">
+      <input class="line" name="code" placeholder="NA-XXXX-XXXX-XXXX-XXXX" autocapitalize="characters" autocomplete="off" spellcheck="false" style="text-align:center;letter-spacing:.08em">
+      <button class="btn primary wide" type="submit" style="margin-top:12px">Join</button>
+    </form>
+  `, (sheet) => sheet.querySelector('input')?.focus());
+}
+
+function syncLine() {
+  if (!sync.isOn()) return 'Share prayers and plans live';
+  const s = S.syncState;
+  if (s === 'error') return 'Offline — will retry';
+  if (s === 'syncing') return 'Syncing…';
+  if (s === 'live') return 'Synced · just now';
+  return 'Connected';
 }
 
 function sheetConfirm(title, body, label, action) {
@@ -1429,6 +1660,7 @@ function sheetConfirm(title, body, label, action) {
    Actions
    ============================================================ */
 const VIEWS = {
+  home: viewHome,
   prayer: viewPrayer,
   plan: viewPlan,
   review: viewReview,
@@ -1439,6 +1671,7 @@ const VIEWS = {
 const ACTIONS = {
   tab: (el) => go(el.dataset.view),
   close: () => closeSheet(),
+  'open-settings': () => go('settings'),
 
   log: (el) => sheetStatus(el.dataset.key),
 
@@ -1560,7 +1793,27 @@ const ACTIONS = {
   'edit-partner': () => sheetName(other(me()).id),
   'edit-color': () => sheetColor(me().id),
   'edit-avatar': () => sheetAvatar(me().id),
-  invite: () => sheetInvite(),
+  sync: () => sheetSync(),
+  'sync-create': () => createSharedSpace(),
+  'sync-join': () => sheetJoin(),
+  'copy-key': async () => {
+    try {
+      await navigator.clipboard.writeText(sync.config().key);
+      toast('Code copied');
+    } catch {
+      toast('Copy it by hand — long press the code');
+    }
+  },
+  'sync-stop': () => {
+    closeSheet();
+    setTimeout(() => sheetConfirm('Stop syncing?', 'This phone keeps everything it has. Changes just stop reaching the other phone.', 'Stop syncing', 'do-sync-stop'), 260);
+  },
+  'do-sync-stop': async () => {
+    await sync.stop();
+    await loadState();
+    refresh();
+    toast('Sync stopped on this phone');
+  },
   preview: () => { S.viewingAs = isPreview() ? null : other(me()).id; S.planTab = 'mine'; refresh(); },
 
   method: () => sheetMethod(),
@@ -1714,6 +1967,15 @@ document.addEventListener('click', (e) => {
   fn(el, e);
 });
 
+document.addEventListener('focusout', () => {
+  if (!S.pendingRemote) return;
+  setTimeout(() => {
+    const el = document.activeElement;
+    if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
+    applyRemoteChange();
+  }, 320);
+});
+
 document.addEventListener('input', (e) => {
   const range = e.target;
   if (range.matches('input[type="range"]')) {
@@ -1811,6 +2073,14 @@ document.addEventListener('submit', async (e) => {
     await db.put('members', m);
     closeSheet();
     refresh();
+    return;
+  }
+
+  if (kind === 'join-space') {
+    const code = String(data.code || '').trim().toUpperCase().replace(/\s+/g, '');
+    if (code.length < 20) return toast('That code looks short');
+    closeSheet();
+    await joinSharedSpace(code);
     return;
   }
 

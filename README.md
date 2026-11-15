@@ -12,11 +12,14 @@ IndexedDB on the device; the UI never waits on a network.
 
 ```bash
 cd na-app
-python3 -m http.server 4173
+node server/sync.mjs          # serves the app AND the sync API on :4173
 ```
 
 Open <http://localhost:4173>. On a phone on the same Wi-Fi, use an HTTPS tunnel
 (see *Getting it on the phones*) — installability requires a secure context.
+
+Two devices on one Mac can be simulated by opening `localhost:4173` and
+`127.0.0.1:4173`: different origins, separate storage, same sync server.
 
 ## Files
 
@@ -27,10 +30,28 @@ Open <http://localhost:4173>. On a phone on the same Wi-Fi, use an HTTPS tunnel
 | `app.js` | state, views, sheets, onboarding, update plumbing |
 | `db.js` | IndexedDB, versioned schema, additive migrations, snapshots |
 | `prayertimes.js` | solar prayer-time maths, calculation methods |
+| `sync.js` | two-phone sync: queue, pull, push, pairing |
+| `server/sync.mjs` | dev server + sync API (same shape as Supabase) |
+| `supabase/schema.sql` | the cloud schema, one paste into Supabase |
 | `sw.js` | service worker — replaces *code* only, never data |
 | `manifest.webmanifest` | install identity, icons, colours |
 | `icons/` | generated from `tools/make-icons.py` |
 | `SPEC.md` | the product spec this was built from |
+
+## Two phones
+
+1. On phone A: **Settings → Connect the other phone → Start a shared space.**
+2. It shows a code like `NA-M476-6AMB-EABP-NE3P-BDRS`.
+3. On phone B: **Settings → Connect the other phone → I have a code**, type it.
+4. Prayers, plans, reviews and reactions now move between them within ~3 seconds
+   (polling, which is plenty for two people).
+
+The code *is* the credential: 20 random characters, never sent anywhere except
+your own database. Deletes travel as tombstones, so nothing resurrects.
+
+The dev server keeps everything in `server/data.json` (gitignored). For a
+permanent home, run `supabase/schema.sql` once and switch the config to
+`mode: 'supabase'` with the project URL and anon key.
 
 ## How updates reach the phones
 

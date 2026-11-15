@@ -80,8 +80,43 @@ async function run(storeName, mode, fn) {
 
 export const getAll = (store) => run(store, 'readonly', (s) => s.getAll()).then((r) => r || []);
 export const get = (store, key) => run(store, 'readonly', (s) => s.get(key)).then((r) => r || null);
-export const put = (store, rec) => run(store, 'readwrite', (s) => s.put(rec));
-export const del = (store, key) => run(store, 'readwrite', (s) => s.delete(key));
+
+/* ---- sync hooks -------------------------------------------------
+   Every write and delete notifies the sync layer, unless we are
+   applying data that came *from* the server (muted), so nothing
+   gets echoed back in a loop.
+   ---------------------------------------------------------------- */
+let hooks = null;
+let muteDepth = 0;
+
+export function setHooks(h) { hooks = h; }
+
+export async function mute(fn) {
+  muteDepth++;
+  try { return await fn(); } finally { muteDepth--; }
+}
+
+const notifyWrite = (store, rec) => {
+  if (muteDepth || !hooks?.onWrite) return;
+  hooks.onWrite(store, rec);
+};
+const notifyDelete = (store, key) => {
+  if (muteDepth || !hooks?.onDelete) return;
+  hooks.onDelete(store, key);
+};
+
+export async function put(store, rec) {
+  const out = await run(store, 'readwrite', (s) => s.put(rec));
+  notifyWrite(store, rec);
+  return out;
+}
+
+export async function del(store, key) {
+  const out = await run(store, 'readwrite', (s) => s.delete(key));
+  notifyDelete(store, key);
+  return out;
+}
+
 export const clear = (store) => run(store, 'readwrite', (s) => s.clear());
 
 export async function putMany(store, recs) {

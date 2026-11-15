@@ -10,13 +10,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '1.8.0';
+const APP_VERSION = '1.8.1';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '1.8.1', at: '15 Nov 2026', notes: "Every objective can be renamed, moved, or deleted — with undo." },
   { v: '1.8.0', at: '15 Nov 2026', notes: "Objectives with progress bars, a two-tier shelf, and a calmer settings list." },
   { v: '1.7.0', at: '15 Nov 2026', notes: "Prayer times from Masjid Cluj-Napoca, and tasks that can be half-done." },
   { v: '1.6.1', at: '15 Nov 2026', notes: "Days before your start date can't be opened — no empty history to misread." },
@@ -1023,6 +1024,7 @@ function goalCard(g, editable) {
       <div class="goal-top">
         <span class="goal-title">${esc(g.title)}</span>
         <span class="goal-pct num">${pct}%</span>
+        ${editable ? `<button class="icon-btn goal-menu" data-act="goal-menu" data-id="${g.id}" aria-label="Edit or delete">⋯</button>` : ''}
       </div>
       ${editable
         ? `<input class="goal-bar" type="range" min="0" max="100" step="5" value="${pct}" data-goal="${g.id}" style="--p:${pct}" aria-label="${esc(g.title)} progress">`
@@ -1059,7 +1061,7 @@ function goalDoneSection(done, editable) {
               <div class="goal-title">${esc(g.title)}</div>
               <div class="goal-meta">${g.scope === 'main' ? 'Main' : 'Secondary'} · ${new Date(g.completedAt).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' })}</div>
             </div>
-            ${editable ? `<button class="icon-btn" data-act="restore-goal" data-id="${g.id}" aria-label="Put it back">↩</button>` : ''}
+            ${editable ? `<button class="icon-btn" data-act="goal-menu" data-id="${g.id}" aria-label="Edit or delete">⋯</button>` : ''}
           </div>`).join('')
         : `<div class="empty small"><b>An empty shelf</b>Objectives you reach will rest here.</div>`}
     </div>
@@ -1197,7 +1199,11 @@ function viewReview() {
 function noteBlock(review, fromMember, toMember) {
   const existing = (review.notes || []).find((n) => n.from === fromMember.id);
   if (existing) {
-    return `<div class="note-from"><span class="av">💬</span><span>${esc(existing.text)}</span></div>`;
+    return `<div class="note-from">
+      <span class="av">💬</span>
+      <span style="flex:1">${esc(existing.text)}</span>
+      <button class="icon-btn" data-act="delete-note" data-id="${review.id}" aria-label="Delete your note">✕</button>
+    </div>`;
   }
   return `
     <form data-form="add-note" data-review="${review.id}" style="margin-top:14px">
@@ -2051,6 +2057,34 @@ function sheetGoalDone(id) {
   `);
 }
 
+function sheetGoal(id) {
+  const g = S.goals.find((x) => x.id === id);
+  if (!g) return;
+  const pct = Math.round(g.progress || 0);
+  openSheet(`
+    <div class="grip"></div>
+    <h3>${esc(g.title)}</h3>
+    <p class="sheet-sub">${g.scope === 'main' ? 'Main objective' : 'Secondary objective'}${g.completedAt ? ' · accomplished' : ` · ${pct}%`}</p>
+    <form data-form="edit-goal" data-id="${id}">
+      <input class="line" name="title" value="${esc(g.title)}" maxlength="90">
+      <button class="btn primary wide" type="submit" style="margin-top:10px">Save name</button>
+    </form>
+    <div class="sheet-list" style="margin-top:12px">
+      ${g.completedAt ? `
+        <button class="sheet-opt" data-act="restore-goal" data-id="${id}">
+          <span class="lbl">Put it back on the list</span>
+        </button>` : `
+        <button class="sheet-opt" data-act="goal-scope" data-id="${id}">
+          <span class="lbl">${g.scope === 'main' ? 'Move to secondary' : 'Make it a main objective'}</span>
+        </button>`}
+      <button class="sheet-opt" data-act="delete-goal" data-id="${id}" style="color:var(--miss-ink)">
+        <span class="lbl">Delete</span>
+      </button>
+      <button class="sheet-opt cancel" data-act="close">Close</button>
+    </div>
+  `, (sheet) => sheet.querySelector('input')?.focus());
+}
+
 function sheetConfirm(title, body, label, action) {  openSheet(`
     <div class="grip"></div>
     <h3>${title}</h3>
@@ -2144,6 +2178,44 @@ const ACTIONS = {
 
   'goal-tab': (el) => { S.goalTab = el.dataset.tab; refresh(); },
 
+  'goal-menu': (el) => sheetGoal(el.dataset.id),
+
+  'goal-scope': async (el) => {
+    const g = S.goals.find((x) => x.id === el.dataset.id);
+    if (!g) return;
+    g.scope = g.scope === 'main' ? 'secondary' : 'main';
+    await saveGoal(g);
+    closeSheet();
+    refresh();
+    toast(g.scope === 'main' ? 'Moved to main objectives' : 'Moved to secondary');
+  },
+
+  'delete-note': async (el) => {
+    const rec = S.reviews.find((r) => r.id === el.dataset.id);
+    const who = actor();
+    if (!rec) return;
+    rec.notes = (rec.notes || []).filter((n) => n.from !== who.id);
+    rec.updatedAt = Date.now();
+    await saveReview(rec);
+    refresh();
+    toast('Note removed');
+  },
+
+  'delete-goal': async (el) => {    const id = el.dataset.id;
+    const g = S.goals.find((x) => x.id === id);
+    if (!g) return;
+    S.goals = S.goals.filter((x) => x.id !== id);
+    await db.del('goals', id);
+    closeSheet();
+    refresh();
+    haptic(16);
+    toast('Objective deleted', 6000, 'Undo', async () => {
+      S.goals.push(g);
+      await db.put('goals', g);
+      refresh();
+    });
+  },
+
   'goal-complete': async (el) => {
     const g = S.goals.find((x) => x.id === el.dataset.id);
     if (!g) return;
@@ -2171,6 +2243,7 @@ const ACTIONS = {
     g.completedAt = null;
     g.progress = 90;
     await saveGoal(g);
+    closeSheet();
     refresh();
     toast('Back on the list');
   },
@@ -2599,6 +2672,18 @@ document.addEventListener('submit', async (e) => {
     await saveGoal(goal);
     haptic(8);
     form.reset();
+    refresh();
+    return;
+  }
+
+  if (kind === 'edit-goal') {
+    const g = S.goals.find((x) => x.id === form.dataset.id);
+    if (!g) return;
+    const title = String(data.title || '').trim();
+    if (!title) return;
+    g.title = title;
+    await saveGoal(g);
+    closeSheet();
     refresh();
     return;
   }

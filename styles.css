@@ -238,8 +238,9 @@ input,textarea,select{font:inherit;color:inherit;}
 /* goals -------------------------------------------------------------- */
 .goals{display:flex;flex-direction:column;gap:9px;}
 .goal{padding:15px 17px 13px;border-radius:var(--r-sm);background:var(--card-flat);box-shadow:inset 0 0 0 1px var(--line);}
-.goal-top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:6px;}
-.goal-title{font-size:15px;font-weight:550;letter-spacing:-.012em;word-break:break-word;}
+.goal-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:6px;}
+.goal-top .goal-menu{width:26px;height:26px;margin:-4px -8px -4px 0;align-self:center;}
+.goal-title{font-size:15px;font-weight:550;letter-spacing:-.012em;word-break:break-word;flex:1;}
 .goal-pct{font-size:12.5px;color:var(--ink-3);font-weight:650;flex:none;}
 .goal-bar{width:100%;height:26px;margin:0;display:block;}
 .goal-track{height:8px;border-radius:99px;background:rgba(255,255,255,.1);overflow:hidden;}

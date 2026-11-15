@@ -10,13 +10,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '2.1.2';
+const APP_VERSION = '2.1.3';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '2.1.3', at: '15 Nov 2026', notes: "The app now lives at a permanent address." },
   { v: '2.1.2', at: '15 Nov 2026', notes: "Check for updates now performs a true hard refresh." },
   { v: '2.1.1', at: '15 Nov 2026', notes: "The streak gets a face: a big number, the week, your best." },
   { v: '2.1.0', at: '15 Nov 2026', notes: "Streaks: five prayers on time, day after day." },

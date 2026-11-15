@@ -236,6 +236,14 @@ input,textarea,select{font:inherit;color:inherit;}
 .verse-rule{width:30px;height:1px;background:var(--line-2);margin:20px auto 12px;}
 .verse-ref{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3);font-weight:600;font-family:var(--font);}
 
+/* streak --------------------------------------------------------------- */
+.streak{display:flex;align-items:center;gap:14px;padding:16px 18px;margin-top:14px;border-radius:var(--r-md);background:var(--card);box-shadow:var(--shadow);}
+.streak .flame{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:color-mix(in srgb, var(--pink) 14%, transparent);color:var(--pink);flex:none;}
+.streak .k{font-size:14.5px;font-weight:600;letter-spacing:-.01em;}
+.streak .d{font-size:12px;color:var(--ink-3);margin-top:2px;}
+.streak.zero .flame{opacity:.4;}
+.hero-streak{display:inline-flex;align-items:center;gap:6px;margin-top:11px;font-size:12px;font-weight:600;color:var(--pink);}
+
 /* recap --------------------------------------------------------------- */
 .recap-banner{
   position:relative;margin-top:14px;border-radius:24px;overflow:hidden;

@@ -10,13 +10,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '2.0.0';
+const APP_VERSION = '2.1.0';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '2.1.0', at: '15 Nov 2026', notes: "Streaks: five prayers on time, day after day." },
   { v: '2.0.0', at: '15 Nov 2026', notes: "A weekly recap that reads your week back to you — prayers, tasks, mood, the best day." },
   { v: '1.9.1', at: '15 Nov 2026', notes: "Serif sheet titles and warmer section labels." },
   { v: '1.9.0', at: '15 Nov 2026', notes: "Serif titles, a gradient ring, and small details that feel made." },
@@ -748,7 +749,7 @@ function weekStats(w) {
   const isDone = (t) => taskState(t) === 'done';
 
   const per = S.members.map((m) => {
-    let ontime = 0, late = 0, missed = 0, tasksDone = 0, tasksTotal = 0;
+    let ontime = 0, late = 0, missed = 0, tasksDone = 0, tasksTotal = 0, perfect = 0;
     let prod = 0, prodN = 0, hap = 0, hapN = 0;
     const wins = [];
 
@@ -759,6 +760,7 @@ function weekStats(w) {
         else if (st === 'late') late++;
         else if (st === 'missed') missed++;
       }
+      if (PRAYER_ORDER.every((k) => getPrayer(m.id, day, k)?.status === 'ontime')) perfect++;
       for (const t of planFor(m.id, day)) {
         tasksTotal++;
         if (isDone(t)) tasksDone++;
@@ -773,7 +775,7 @@ function weekStats(w) {
 
     return {
       member: m, ontime, late, missed, kept: ontime + late,
-      tasksDone, tasksTotal,
+      tasksDone, tasksTotal, perfect,
       prod: prodN ? prod / prodN : null,
       hap: hapN ? hap / hapN : null,
       wins,
@@ -891,6 +893,7 @@ function sheetRecap(index) {
             <span><b class="num">${p.ontime}</b> on time</span>
             <span><b class="num">${p.late}</b> late</span>
             <span><b class="num">${p.missed}</b> missed</span>
+            <span><b class="num">${p.perfect}</b> perfect</span>
             <span><b class="num">${p.tasksDone}/${p.tasksTotal}</b> tasks</span>
             ${p.prod != null ? `<span><b class="num">${p.prod.toFixed(1)}</b> focus</span>` : ''}
             ${p.hap != null ? `<span><b class="num">${p.hap.toFixed(1)}</b> mood</span>` : ''}
@@ -909,6 +912,78 @@ function sheetRecap(index) {
       <button class="btn primary wide" style="margin-top:16px" data-act="close">Done</button>
     </div>
   `);
+}
+
+/** Days where all five prayers were logged on time. */
+function perfectDays(memberId) {
+  const tally = new Map();
+  for (const r of S.prayers) {
+    if (r.memberId !== memberId) continue;
+    if (r.status !== 'ontime') continue;
+    tally.set(r.day, (tally.get(r.day) || 0) + 1);
+  }
+  const out = new Set();
+  for (const [day, n] of tally) if (n >= 5) out.add(day);
+  return out;
+}
+
+/**
+ * A day joins the streak only when all five prayers were on time.
+ * Today never breaks a streak while it is still being lived —
+ * the count falls back to yesterday until today is complete.
+ */
+function streakOf(memberId) {
+  const perfect = perfectDays(memberId);
+  const start = statsStart();
+  const today = dayKey();
+
+  let cursor = parseDay(today);
+  if (!perfect.has(today)) cursor = addDays(cursor, -1);
+
+  let current = 0;
+  while (dayKey(cursor) >= start && perfect.has(dayKey(cursor))) {
+    current++;
+    cursor = addDays(cursor, -1);
+  }
+
+  let best = 0;
+  let run = 0;
+  for (let d = parseDay(start); dayKey(d) <= today; d = addDays(d, 1)) {
+    if (perfect.has(dayKey(d))) {
+      run++;
+      if (run > best) best = run;
+    } else {
+      run = 0;
+    }
+  }
+
+  return { current, best: Math.max(best, current) };
+}
+
+const flameSvg = (size = 16) =>
+  `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c2.9 3.3 5 5.7 5 8.6a5 5 0 0 1-10 0C7 8.7 9.1 6.3 12 3Z"/><path d="M12 12.4c1 .9 1.6 1.8 1.6 2.7a1.6 1.6 0 1 1-3.2 0c0-.9.6-1.8 1.6-2.7Z"/></svg>`;
+
+function streakCard() {
+  const who = actor();
+  const s = streakOf(who.id);
+  if (s.current > 0) {
+    return `
+      <div class="streak">
+        <span class="flame">${flameSvg(18)}</span>
+        <div>
+          <div class="k">${s.current}-day streak</div>
+          <div class="d">Every prayer on time${s.best > s.current ? ` · best ${s.best}` : ''}</div>
+        </div>
+      </div>`;
+  }
+  return `
+    <div class="streak zero">
+      <span class="flame">${flameSvg(18)}</span>
+      <div>
+        <div class="k">Start a streak</div>
+        <div class="d">${s.best ? `Your best is ${s.best} days` : 'Five on-time prayers, one day at a time'}</div>
+      </div>
+    </div>`;
 }
 
 /* ============================================================
@@ -977,6 +1052,8 @@ function viewHome() {
       ${partnerSide}
     </section>
 
+    ${streakCard()}
+
     <div class="next">
       <span class="dot"></span>
       <div>
@@ -1016,6 +1093,7 @@ function viewPrayer() {
   const recs = PRAYER_ORDER.map((k) => ({ k, rec: getPrayer(who.id, today, k) }));
   const onTime = recs.filter((x) => x.rec && x.rec.status !== 'missed').length;
   const np = nextPrayer(t);
+  const streak = streakOf(who.id);
   const C = 2 * Math.PI * 52;
 
   const ring = `
@@ -1097,6 +1175,7 @@ function viewPrayer() {
         <div class="next-label">${np.tomorrow ? 'Tomorrow' : 'Next'}</div>
         <div class="next-name">${PMETA[np.key].name} <span class="num" style="color:var(--ink-2);font-size:17px;font-weight:500">${fmtTime(np.at)}</span></div>
         <div class="next-meta num">in <b>${fmtCountdown(np.at - new Date())}</b>${np.tomorrow ? ' · new day' : ''}</div>
+        ${streak.current ? `<div class="hero-streak">${flameSvg(13)} ${streak.current}-day streak</div>` : ''}
       </div>
     </div>
 

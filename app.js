@@ -10,13 +10,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '2.2.2';
+const APP_VERSION = '2.3.0';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '2.3.0', at: '15 Nov 2026', notes: "The Qibla dial carries the Kaaba at its true direction." },
   { v: '2.2.2', at: '15 Nov 2026', notes: "The compass follows one sensor stream and paints once per frame." },
   { v: '2.2.1', at: '15 Nov 2026', notes: "Qibla renders correctly from the first paint, and assets are versioned." },
   { v: '2.2.0', at: '15 Nov 2026', notes: "A Qibla compass that points to the Kaaba." },
@@ -1044,6 +1045,18 @@ function stopCompass() {
 const compassIcon = (size = 20) =>
   `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.6"/><path d="m15.4 8.6-2.1 4.7-4.7 2.1 2.1-4.7 4.7-2.1Z"/></svg>`;
 
+/** A tiny dial with a rose dot at the Qibla bearing. */
+function miniCompass(bearing, size = 24) {
+  const rad = (bearing * Math.PI) / 180;
+  const x = 12 + Math.sin(rad) * 6.4;
+  const y = 12 - Math.cos(rad) * 6.4;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none">
+    <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-opacity=".32" stroke-width="1.2"/>
+    <path d="M12 3.6v2" stroke="currentColor" stroke-opacity=".55" stroke-width="1.2" stroke-linecap="round"/>
+    <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.5" fill="var(--pink)"/>
+  </svg>`;
+}
+
 function qiblaStrip() {
   const { lat, lng } = S.settings;
   const bearing = qiblaBearing(lat, lng);
@@ -1051,10 +1064,10 @@ function qiblaStrip() {
   const km = Math.round(kaabaDistanceKm(lat, lng));
   return `
     <button class="qibla-strip" data-act="qibla">
-      <span class="qs-ico">${compassIcon(18)}</span>
+      <span class="qs-ico">${miniCompass(bearing)}</span>
       <span class="qs-body">
         <span class="qs-k">Qibla</span>
-        <span class="qs-d">${Math.round(bearing)}° ${cardinal} · ${km.toLocaleString(LOCALE)} km</span>
+        <span class="qs-d">${Math.round(bearing)}° ${cardinal} · ${km.toLocaleString(LOCALE)} km to Mecca</span>
       </span>
       <span class="qs-go">›</span>
     </button>`;
@@ -1065,49 +1078,71 @@ function sheetQibla() {
   const bearing = qiblaBearing(lat, lng);
   const cardinal = CARDINALS[Math.round(bearing / 45) % 8];
   const km = Math.round(kaabaDistanceKm(lat, lng));
+  const rad = (bearing * Math.PI) / 180;
+  const mx = 120 + Math.sin(rad) * 72;
+  const my = 120 - Math.cos(rad) * 72;
 
   const ticks = Array.from({ length: 24 }, (_, i) => {
     const angle = i * 15;
     const long = i % 3 === 0;
-    return `<line class="q-tick${long ? ' long' : ''}" stroke="currentColor" stroke-opacity=".18" stroke-linecap="round" x1="120" y1="${long ? 16 : 20}" x2="120" y2="27" transform="rotate(${angle} 120 120)"/>`;
+    return `<line class="q-tick${long ? ' long' : ''}" stroke="currentColor" stroke-opacity=".18" stroke-linecap="round" x1="120" y1="${long ? 17 : 21}" x2="120" y2="28" transform="rotate(${angle} 120 120)"/>`;
   }).join('');
 
   openSheet(`
     <div class="grip"></div>
     <div class="qibla-sheet">
       <h3>Qibla</h3>
-      <p class="sheet-sub">${esc(S.settings.place)} · ${km.toLocaleString(LOCALE)} km to the Kaaba</p>
+      <p class="sheet-sub">${esc(S.settings.place)} · ${km.toLocaleString(LOCALE)} km to Mecca</p>
 
       <div class="q-dial-wrap">
         <svg class="q-svg" viewBox="0 0 240 240" aria-hidden="true">
+          <defs>
+            <radialGradient id="qGlow" cx="50%" cy="42%" r="58%">
+              <stop offset="0" stop-color="#E8749B" stop-opacity=".16"></stop>
+              <stop offset="1" stop-color="#E8749B" stop-opacity="0"></stop>
+            </radialGradient>
+          </defs>
+
+          <circle class="q-disc" cx="120" cy="120" r="105" fill="url(#qGlow)"/>
           <circle class="q-ring" cx="120" cy="120" r="112" fill="none" stroke="currentColor" stroke-opacity=".16"/>
+
           <g id="qDial">
             ${ticks}
-            <text class="q-card" x="120" y="46" text-anchor="middle" fill="currentColor" opacity=".55">N</text>
-            <text class="q-card" x="194" y="125" text-anchor="middle" fill="currentColor" opacity=".55">E</text>
-            <text class="q-card" x="120" y="204" text-anchor="middle" fill="currentColor" opacity=".55">S</text>
-            <text class="q-card" x="46" y="125" text-anchor="middle" fill="currentColor" opacity=".55">W</text>
+            <text class="q-card" x="120" y="48" text-anchor="middle" fill="currentColor" opacity=".5">N</text>
+            <text class="q-card" x="195" y="124.5" text-anchor="middle" fill="currentColor" opacity=".5">E</text>
+            <text class="q-card" x="120" y="201" text-anchor="middle" fill="currentColor" opacity=".5">S</text>
+            <text class="q-card" x="45" y="124.5" text-anchor="middle" fill="currentColor" opacity=".5">W</text>
             <g transform="rotate(${bearing} 120 120)">
-              <path class="q-needle" fill="#E8749B" d="M120 46 L127 82 L120 76 L113 82 Z"/>
-              <path class="q-tail" fill="currentColor" opacity=".16" d="M120 194 L124 166 L116 166 Z"/>
+              <path class="q-needle" fill="#E8749B" d="M120 62 L123.5 92 L120 88.5 L116.5 92 Z"/>
             </g>
           </g>
-          <circle class="q-hub" cx="120" cy="120" r="5.5" fill="currentColor"/>
+
+          <g id="qMarker" transform="translate(${mx.toFixed(1)} ${my.toFixed(1)})">
+            <circle class="q-halo" r="17" fill="#E8749B" opacity="0"/>
+            <g class="q-kaaba">
+              <rect x="-9.5" y="-9.5" width="19" height="19" rx="3.4" fill="#191519" stroke="rgba(255,255,255,.3)" stroke-width="1"/>
+              <rect x="-9.5" y="-3" width="19" height="2.5" fill="#C9A24B"/>
+              <rect x="-2" y="1.8" width="4" height="6" rx=".8" fill="#C9A24B" opacity=".85"/>
+            </g>
+          </g>
+
+          <circle class="q-hub" cx="120" cy="120" r="4.4" fill="currentColor"/>
         </svg>
       </div>
 
-      <div class="q-readout"><b class="num">${Math.round(bearing)}°</b> <span>${cardinal}</span></div>
+      <div class="q-readout"><b class="num">${Math.round(bearing)}°</b><span>${cardinal}</span></div>
       <div class="q-live" id="qLive">Hold the phone flat for live guidance</div>
 
       <button class="btn primary wide" id="qPerm" data-act="qibla-permission" hidden>Turn on the compass</button>
 
-      <p class="q-note" id="qNote">The rose needle points to the Kaaba. If the dial doesn't move, your device has no compass — the top of the dial is north.</p>
+      <p class="q-note" id="qNote">The black cube is Mecca. Turn until it sits at the top of the dial.</p>
     </div>
   `, (sheet) => attachCompass(sheet, bearing));
 }
 
 function attachCompass(sheet, bearing) {
   const dial = sheet.querySelector('#qDial');
+  const marker = sheet.querySelector('#qMarker');
   const wrap = sheet.querySelector('.q-dial-wrap');
   const live = sheet.querySelector('#qLive');
   const note = sheet.querySelector('#qNote');
@@ -1120,6 +1155,13 @@ function attachCompass(sheet, bearing) {
   let lastAligned = null;
   let lastAccuracy = '';
 
+  const placeMarker = (heading) => {
+    const rad = ((bearing - heading) * Math.PI) / 180;
+    const x = 120 + Math.sin(rad) * 72;
+    const y = 120 - Math.cos(rad) * 72;
+    marker.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)})`);
+  };
+
   const paint = () => {
     frame = 0;
     if (pending == null) return;
@@ -1127,6 +1169,7 @@ function attachCompass(sheet, bearing) {
     pending = null;
 
     dial.setAttribute('transform', `rotate(${-heading.toFixed(1)} 120 120)`);
+    placeMarker(heading);
 
     const delta = ((bearing - heading + 540) % 360) - 180;
     const abs = Math.abs(delta);

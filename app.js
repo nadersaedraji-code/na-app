@@ -10,13 +10,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '1.9.1';
+const APP_VERSION = '2.0.0';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '2.0.0', at: '15 Nov 2026', notes: "A weekly recap that reads your week back to you — prayers, tasks, mood, the best day." },
   { v: '1.9.1', at: '15 Nov 2026', notes: "Serif sheet titles and warmer section labels." },
   { v: '1.9.0', at: '15 Nov 2026', notes: "Serif titles, a gradient ring, and small details that feel made." },
   { v: '1.8.1', at: '15 Nov 2026', notes: "Every objective can be renamed, moved, or deleted — with undo." },
@@ -715,6 +716,202 @@ function go(view) {
 }
 
 /* ============================================================
+   Weekly recap — 7-day blocks counted from the start date
+   ============================================================ */
+function weekInfo(index) {
+  const from = addDays(parseDay(statsStart()), index * 7);
+  const to = addDays(from, 6);
+  return { index, from, to, fromKey: dayKey(from), toKey: dayKey(to) };
+}
+
+/** The most recent fully finished week, or null if none yet. */
+function completedWeek() {
+  const start = parseDay(statsStart());
+  const today = parseDay(dayKey());
+  const days = Math.floor((today - start) / 86400000);
+  if (days < 7) return null;
+  const index = Math.floor(days / 7) - 1;
+  return index >= 0 ? weekInfo(index) : null;
+}
+
+function weekDays(w) {
+  const out = [];
+  for (let d = new Date(w.from); d <= w.to; d = addDays(d, 1)) out.push(dayKey(d));
+  return out;
+}
+
+const weekRangeLabel = (w) =>
+  `${w.from.toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' })} – ${w.to.toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' })}`;
+
+function weekStats(w) {
+  const days = weekDays(w);
+  const isDone = (t) => taskState(t) === 'done';
+
+  const per = S.members.map((m) => {
+    let ontime = 0, late = 0, missed = 0, tasksDone = 0, tasksTotal = 0;
+    let prod = 0, prodN = 0, hap = 0, hapN = 0;
+    const wins = [];
+
+    for (const day of days) {
+      for (const k of PRAYER_ORDER) {
+        const st = getPrayer(m.id, day, k)?.status;
+        if (st === 'ontime') ontime++;
+        else if (st === 'late') late++;
+        else if (st === 'missed') missed++;
+      }
+      for (const t of planFor(m.id, day)) {
+        tasksTotal++;
+        if (isDone(t)) tasksDone++;
+      }
+      const rv = reviewFor(m.id, day);
+      if (rv) {
+        if (Number.isFinite(rv.productivity)) { prod += rv.productivity; prodN++; }
+        if (Number.isFinite(rv.happiness)) { hap += rv.happiness; hapN++; }
+        if (rv.wins) wins.push({ day, text: rv.wins });
+      }
+    }
+
+    return {
+      member: m, ontime, late, missed, kept: ontime + late,
+      tasksDone, tasksTotal,
+      prod: prodN ? prod / prodN : null,
+      hap: hapN ? hap / hapN : null,
+      wins,
+    };
+  });
+
+  let bestDay = null;
+  for (const day of days) {
+    let score = 0;
+    let any = false;
+    for (const m of S.members) {
+      const rv = reviewFor(m.id, day);
+      if (!rv) continue;
+      any = true;
+      score += (rv.productivity ?? 0) + (rv.happiness ?? 0);
+    }
+    if (any && (!bestDay || score > bestDay.score)) bestDay = { day, score };
+  }
+
+  const reactions = S.reactions.filter((r) => days.includes(r.day)).length;
+  const goalsDone = S.goals.filter((g) => g.completedAt && days.includes(dayKey(new Date(g.completedAt)))).length;
+  const quote = per
+    .flatMap((p) => p.wins.map((wn) => ({ ...wn, member: p.member })))
+    .sort((a, b) => b.text.length - a.text.length)[0] || null;
+
+  return { days, per, bestDay, reactions, goalsDone, quote };
+}
+
+function weekNarrative(s) {
+  const pct = (p) => Math.round((p.kept / 35) * 100);
+  const avg = s.per.length === 2 ? (pct(s.per[0]) + pct(s.per[1])) / 2 : pct(s.per[0]);
+  const moods = s.per.map((p) => p.hap).filter((v) => v != null);
+  const mood = moods.length ? moods.reduce((a, b) => a + b, 0) / moods.length : null;
+  const tasksDone = s.per.reduce((n, p) => n + p.tasksDone, 0);
+  const tasksTotal = s.per.reduce((n, p) => n + p.tasksTotal, 0);
+
+  let title = 'A week, recorded';
+  if (avg >= 99.5) title = 'Every prayer kept';
+  else if (avg >= 90) title = 'Nearly every prayer kept';
+  else if (avg >= 72) title = 'A steady week';
+  else if (avg >= 45) title = 'A half-lit week';
+  else if (avg > 0) title = 'A softer week';
+
+  const bits = [];
+  if (s.per.length === 2) {
+    const a = s.per[0].kept;
+    const b = s.per[1].kept;
+    if (a === 35 && b === 35) bits.push('Every prayer kept, both of you.');
+    else if (a === b) bits.push(`${a} prayers kept each, out of 35.`);
+    else bits.push(`${a} and ${b} prayers kept out of 35.`);
+  } else {
+    bits.push(`${s.per[0].kept} prayers kept out of 35.`);
+  }
+  if (tasksTotal) bits.push(`${tasksDone} of ${tasksTotal} tasks done.`);
+  if (mood != null) bits.push(`Mood averaged ${mood.toFixed(1)}/10.`);
+
+  return { title, line: bits.join(' ') };
+}
+
+function weekMini(memberId, days) {
+  return `<div class="week mini">${days.map((day) => {
+    const d = parseDay(day);
+    const dots = PRAYER_ORDER.map((k) => `<i class="dot ${getPrayer(memberId, day, k)?.status || ''}"></i>`).join('');
+    return `<div class="col"><span class="dow">${d.toLocaleDateString(LOCALE, { weekday: 'narrow' })}</span>${dots}</div>`;
+  }).join('')}</div>`;
+}
+
+function recapBanner() {
+  const w = completedWeek();
+  if (!w) return '';
+  if (S.meta.recap?.dismissedWeek === w.index) return '';
+  return `
+    <div class="recap-banner">
+      <button class="rb-main" data-act="open-recap" data-week="${w.index}">
+        <span class="rb-ico">✦</span>
+        <span class="rb-body">
+          <span class="rb-k">Week ${w.index + 1} is complete</span>
+          <span class="rb-d">${weekRangeLabel(w)} · your recap is ready</span>
+        </span>
+      </button>
+      <button class="rb-x" data-act="dismiss-recap" data-week="${w.index}" aria-label="Dismiss">✕</button>
+    </div>`;
+}
+
+function sheetRecap(index) {
+  const w = weekInfo(index);
+  const s = weekStats(w);
+  const n = weekNarrative(s);
+  const pct = (p) => Math.round((p.kept / 35) * 100);
+
+  const best = s.bestDay
+    ? parseDay(s.bestDay.day).toLocaleDateString(LOCALE, { weekday: 'long' })
+    : '—';
+
+  const closing = s.reactions
+    ? `You encouraged each other ${s.reactions} time${s.reactions === 1 ? '' : 's'} this week.`
+    : 'No reactions this week — one small emoji goes a long way.';
+
+  openSheet(`
+    <div class="grip"></div>
+    <div class="recap">
+      <div class="recap-kicker">Week ${index + 1} · ${weekRangeLabel(w)}</div>
+      <h3 class="recap-title">${n.title}</h3>
+      <p class="recap-line">${n.line}</p>
+
+      ${s.per.map((p) => `
+        <div class="recap-person">
+          <div class="recap-head">
+            <span class="av">${p.member.avatar}</span>
+            <span class="nm">${esc(p.member.name)}</span>
+            <span class="pc num">${pct(p)}%</span>
+          </div>
+          ${weekMini(p.member.id, s.days)}
+          <div class="recap-nums">
+            <span><b class="num">${p.ontime}</b> on time</span>
+            <span><b class="num">${p.late}</b> late</span>
+            <span><b class="num">${p.missed}</b> missed</span>
+            <span><b class="num">${p.tasksDone}/${p.tasksTotal}</b> tasks</span>
+            ${p.prod != null ? `<span><b class="num">${p.prod.toFixed(1)}</b> focus</span>` : ''}
+            ${p.hap != null ? `<span><b class="num">${p.hap.toFixed(1)}</b> mood</span>` : ''}
+          </div>
+        </div>`).join('')}
+
+      <div class="recap-extras">
+        <div><span class="k">Best day</span><span class="v">${best}</span></div>
+        <div><span class="k">Encouragements</span><span class="v num">${s.reactions}</span></div>
+        <div><span class="k">Goals reached</span><span class="v num">${s.goalsDone}</span></div>
+      </div>
+
+      ${s.quote ? `<blockquote class="recap-quote">“${esc(s.quote.text)}”<cite>${esc(s.quote.member.name)} · ${parseDay(s.quote.day).toLocaleDateString(LOCALE, { weekday: 'long' })}</cite></blockquote>` : ''}
+
+      <p class="recap-close">${closing}</p>
+      <button class="btn primary wide" style="margin-top:16px" data-act="close">Done</button>
+    </div>
+  `);
+}
+
+/* ============================================================
    View — Home
    ============================================================ */
 function viewHome() {
@@ -772,6 +969,8 @@ function viewHome() {
     </div>
 
     ${verseCard()}
+
+    ${recapBanner()}
 
     <section class="duo card">
       ${side(who, true)}
@@ -2189,6 +2388,15 @@ const ACTIONS = {
   'goal-tab': (el) => { S.goalTab = el.dataset.tab; refresh(); },
 
   'goal-menu': (el) => sheetGoal(el.dataset.id),
+
+  'open-recap': (el) => sheetRecap(Number(el.dataset.week)),
+
+  'dismiss-recap': async (el) => {
+    const wk = Number(el.dataset.week);
+    await db.put('meta', { key: 'recap', dismissedWeek: wk });
+    S.meta.recap = { key: 'recap', dismissedWeek: wk };
+    refresh();
+  },
 
   'goal-scope': async (el) => {
     const g = S.goals.find((x) => x.id === el.dataset.id);

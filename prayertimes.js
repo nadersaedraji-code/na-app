@@ -13,6 +13,37 @@ const asin = (x) => Math.asin(x) * R2D;
 const acos = (x) => Math.acos(x) * R2D;
 const atan = (x) => Math.atan(x) * R2D;
 
+import { CLUJ_YEAR, CLUJ_2026 } from './cluj-times.js';
+
+/* The mosque's own display runs a few minutes from its published
+   calendar: Fajr and Shuruq a touch earlier, the rest slightly later. */
+const CLUJ_SHIFT = { fajr: -5, shuruq: -6, dhuhr: 0, asr: 3, maghrib: 5, isha: 3 };
+
+function at(date, hhmm, shift = 0) {
+  const [h, m] = hhmm.split(':').map(Number);
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), h, m + shift);
+}
+
+/** Times exactly as Masjid Cluj-Napoca publishes them on Mawaqit. */
+function mosqueTimes(date, preset) {
+  if (preset !== 'cluj' || date.getFullYear() !== CLUJ_YEAR) return null;
+  const key = `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  const row = CLUJ_2026[key];
+  if (!row) return null;
+
+  const [fajr, shuruq, dhuhr, asr, maghrib, isha] = row.split(' ');
+  const m = at(date, maghrib, CLUJ_SHIFT.maghrib);
+  return {
+    fajr: at(date, fajr, CLUJ_SHIFT.fajr),
+    sunrise: at(date, shuruq, CLUJ_SHIFT.shuruq),
+    dhuhr: at(date, dhuhr, CLUJ_SHIFT.dhuhr),
+    asr: at(date, asr, CLUJ_SHIFT.asr),
+    maghrib: m,
+    isha: at(date, isha, CLUJ_SHIFT.isha),
+    sunset: m,
+  };
+}
+
 export const METHODS = {
   MWL: { label: 'Muslim World League', fajr: 18, isha: 17 },
   ISNA: { label: 'North America (ISNA)', fajr: 15, isha: 15 },
@@ -118,10 +149,11 @@ function compute(date, { lat, lng, method = 'MWL' }) {
 export function dayTimes(input, settings) {
   const date = toDate(input);
   const opts = { lat: settings.lat, lng: settings.lng, method: settings.method };
-  const t = compute(date, opts);
+  const preset = settings.preset;
+  const t = mosqueTimes(date, preset) || compute(date, opts);
 
   const next = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1, 12, 0, 0);
-  const tNext = compute(next, opts);
+  const tNext = mosqueTimes(next, preset) || compute(next, opts);
 
   const midnight = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1, 0, 0, 0);
 

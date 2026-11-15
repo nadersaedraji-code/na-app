@@ -385,6 +385,8 @@ input,textarea,select{font:inherit;color:inherit;}
   transition:background .2s var(--ease), opacity .25s var(--ease);
 }
 .task.done{opacity:.46;}
+.task.partial{opacity:.88;}
+.task.partial .title{text-decoration:underline;text-decoration-style:dotted;text-decoration-color:var(--line-2);text-underline-offset:3px;}
 .task.done .title{text-decoration:line-through;text-decoration-thickness:1.5px;text-decoration-color:var(--ink-3);}
 .task .check{
   width:22px;height:22px;flex:none;border-radius:50%;
@@ -392,6 +394,7 @@ input,textarea,select{font:inherit;color:inherit;}
   display:grid;place-items:center;margin-top:1px;transition:all .25s var(--spring);
 }
 .task .check svg{opacity:0;transform:scale(.4);transition:all .25s var(--spring);}
+.task .check.partial{background:linear-gradient(90deg, var(--pink-btn) 0 50%, transparent 50% 100%);box-shadow:inset 0 0 0 1.6px var(--pink-btn);}
 .task.done .check{background:var(--accent-strong);box-shadow:none;}
 .task.done .check svg{opacity:1;transform:scale(1);}
 .task .body{flex:1;min-width:0;}

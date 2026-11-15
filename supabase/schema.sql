@@ -49,6 +49,7 @@ create table if not exists plan_items (
   priority   text default 'normal',
   done       boolean default false,
   done_at    timestamptz,
+  progress   text not null default 'todo',
   position   integer default 0,
   created_at timestamptz,
   updated_at timestamptz not null default now(),
@@ -96,6 +97,9 @@ create index if not exists plan_couple_updated on plan_items (couple_id, updated
 create index if not exists reviews_couple_updated on reviews (couple_id, updated_at);
 create index if not exists reactions_couple_updated on reactions (couple_id, updated_at);
 create index if not exists tombstones_couple_time on tombstones (couple_id, deleted_at);
+
+-- Later additions, safe to run on an existing database.
+alter table plan_items add column if not exists progress text not null default 'todo';
 
 -- Close the doors: the anon key alone can touch nothing.
 alter table couples     enable row level security;
@@ -221,11 +225,12 @@ begin
   if jsonb_typeof(p_data->'plan') = 'array' then
     for r in select * from jsonb_array_elements(p_data->'plan') loop
       insert into plan_items (id, couple_id, member_id, day, title, time_label, priority,
-                              done, done_at, position, created_at, updated_at)
+                              done, done_at, progress, position, created_at, updated_at)
       values (r->>'id', cid, r->>'member_id', (r->>'day')::date, r->>'title',
               r->>'time_label', coalesce(r->>'priority','normal'),
               coalesce((r->>'done')::boolean, false),
               nullif(r->>'done_at','')::timestamptz,
+              coalesce(r->>'progress','todo'),
               coalesce((r->>'position')::int, 0),
               nullif(r->>'created_at','')::timestamptz, clock)
       on conflict (id) do update
@@ -234,6 +239,7 @@ begin
             priority = excluded.priority,
             done = excluded.done,
             done_at = excluded.done_at,
+            progress = excluded.progress,
             position = excluded.position,
             updated_at = clock,
             deleted_at = null;

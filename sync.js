@@ -72,7 +72,7 @@ function toWire(kind, r) {
       id: r.id, member_id: r.memberId, day: r.day, title: r.title,
       time_label: r.timeLabel || '', priority: r.priority || 'normal',
       done: !!r.done, done_at: iso(r.doneAt), position: r.position || 0,
-      created_at: iso(r.createdAt),
+      created_at: iso(r.createdAt), progress: r.progress || (r.done ? 'done' : 'todo'),
     };
   }
   if (kind === 'reviews') {
@@ -104,6 +104,7 @@ function fromWire(kind, w) {
       timeLabel: w.time_label || '', priority: w.priority || 'normal',
       done: !!w.done, doneAt: when(w.done_at), position: w.position || 0,
       createdAt: when(w.created_at), demo: false,
+      progress: w.progress || (w.done ? 'done' : 'todo'),
     };
   }
   if (kind === 'reviews') {

@@ -133,7 +133,7 @@ function push(body) {
 
   const tables = [
     ['prayers', ['id', 'member_id', 'day', 'prayer', 'status', 'logged_at']],
-    ['plan', ['id', 'member_id', 'day', 'title', 'time_label', 'priority', 'done', 'done_at', 'position', 'created_at']],
+    ['plan', ['id', 'member_id', 'day', 'title', 'time_label', 'priority', 'done', 'done_at', 'position', 'created_at', 'progress']],
     ['reviews', ['id', 'member_id', 'day', 'wins', 'productivity', 'happiness', 'highlight', 'notes']],
     ['reactions', ['id', 'from_member', 'target_type', 'target_id', 'emoji']],
     ['members', ['id', 'name', 'color', 'avatar', 'tz']],

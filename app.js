@@ -10,13 +10,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '1.6.1';
+const APP_VERSION = '1.7.0';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '1.7.0', at: '15 Nov 2026', notes: "Prayer times from Masjid Cluj-Napoca, and tasks that can be half-done." },
   { v: '1.6.1', at: '15 Nov 2026', notes: "Days before your start date can't be opened — no empty history to misread." },
   { v: '1.6.0', at: '15 Nov 2026', notes: "Partner stats, a trend graph, optional task times, and a verse to open the day." },
   { v: '1.5.0', at: '15 Nov 2026', notes: "Deeper ink, crisp white cards on blush, one dark anchor block." },
@@ -81,9 +82,10 @@ const VERSES = [
 ];
 
 const DEFAULTS = {
-  lat: 48.8566,
-  lng: 2.3522,
-  place: 'Paris',
+  lat: 46.7612026,
+  lng: 23.5781945,
+  place: 'Cluj-Napoca',
+  preset: null,
   method: 'MWL',
   theme: 'light',
   notif: { prayer: true, followup: true, review: true, partner: true },
@@ -103,7 +105,7 @@ const TZ_CITY = {
   'Europe/Amsterdam': ['Amsterdam', 52.3676, 4.9041],
   'Europe/Geneva': ['Geneva', 46.2044, 6.1432],
   'Europe/Zurich': ['Zurich', 47.3769, 8.5417],
-  'Europe/Bucharest': ['Bucharest', 44.4268, 26.1025],
+  'Europe/Bucharest': ['Cluj-Napoca', 46.7612026, 23.5781945, 'cluj'],
   'Europe/Athens': ['Athens', 37.9838, 23.7275],
   'Europe/Istanbul': ['Istanbul', 41.0082, 28.9784],
   'Africa/Casablanca': ['Casablanca', 33.5731, -7.5898],
@@ -162,10 +164,10 @@ const TZ_CITY = {
 function detectLocation() {
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const hit = TZ_CITY[tz];
-  if (hit) return { place: hit[0], lat: hit[1], lng: hit[2] };
+  if (hit) return { place: hit[0], lat: hit[1], lng: hit[2], preset: hit[3] || null };
   // Unknown zone: fall back to the middle of that timezone's meridian.
   const offset = -new Date().getTimezoneOffset() / 60;
-  return { place: 'Approximate', lat: 30, lng: Math.max(-180, Math.min(180, offset * 15)) };
+  return { place: 'Approximate', lat: 30, lng: Math.max(-180, Math.min(180, offset * 15)), preset: null };
 }
 
 const S = {
@@ -503,7 +505,13 @@ async function completeOnboarding(solo) {
 
   await db.putMany('members', members);
   const loc = detectLocation();
-  const firstSettings = { ...DEFAULTS, ...loc, notif: { ...DEFAULTS.notif }, startDate: dayKey(addDays(new Date(), 1)) };
+  const firstSettings = {
+    ...DEFAULTS,
+    ...loc,
+    preset: loc.preset || null,
+    notif: { ...DEFAULTS.notif },
+    startDate: dayKey(addDays(new Date(), 1)),
+  };
   await db.put('meta', { key: 'settings', value: firstSettings });
   await db.saveMeta('app', { viewerId: meId, schemaVersion: db.SCHEMA_VERSION });
   if (SEED_SAMPLE) {
@@ -688,7 +696,7 @@ function viewHome() {
   const side = (m, isMe) => {
     const count = prayerCount(m.id, today);
     const plan = planFor(m.id, today);
-    const done = plan.filter((x) => x.done).length;
+    const done = plan.filter(isDone).length;
     const review = reviewFor(m.id, today);
     const dots = PRAYER_ORDER.map((k) => {
       const r = getPrayer(m.id, today, k);
@@ -711,7 +719,7 @@ function viewHome() {
       </div>`;
 
   const myPlan = planFor(who.id, today);
-  const myDone = myPlan.filter((x) => x.done).length;
+  const myDone = myPlan.filter(isDone).length;
   const myReview = reviewFor(who.id, today);
   const theirsReview = p ? reviewFor(p.id, today) : null;
 
@@ -899,7 +907,7 @@ function viewPlan() {
   const editable = shownMember.id === who.id;
   const tasks = planFor(shownMember.id, today);
   const yesterday = dayKey(addDays(new Date(), -1));
-  const carry = editable ? planFor(shownMember.id, yesterday).filter((t) => !t.done) : [];
+  const carry = editable ? planFor(shownMember.id, yesterday).filter((t) => !isDone(t)) : [];
 
   const list = tasks.length
     ? `<div class="tasks stagger">${tasks.map((t) => taskRow(t, editable)).join('')}</div>`
@@ -912,7 +920,7 @@ function viewPlan() {
       <div>
         <div class="eyebrow">Today · ${parseDay(today).toLocaleDateString(LOCALE, { day: 'numeric', month: 'long' })}</div>
         <h1>The plan</h1>
-        <div class="sub">${tasks.filter((t) => t.done).length} of ${tasks.length} done</div>
+        <div class="sub">${tasks.filter(isDone).length} of ${tasks.length} done</div>
       </div>
     </header>
 
@@ -938,16 +946,21 @@ function viewPlan() {
   `;
 }
 
+const isDone = (t) => taskState(t) === 'done';
+const taskState = (t) => t.progress || (t.done ? 'done' : 'todo');
+
 function taskRow(t, editable) {
   const react = reactionFor(actor().id, 'plan', t.id);
+  const st = taskState(t);
+  const nextLabel = st === 'todo' ? 'Partly done' : st === 'partial' ? 'Done' : 'Not done';
   return `
-    <div class="task ${t.done ? 'done' : ''}" data-id="${t.id}">
-      <button class="check" data-act="toggle-task" data-id="${t.id}" aria-label="${t.done ? 'Mark not done' : 'Mark done'}">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0A0B0F" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+    <div class="task ${st === 'done' ? 'done' : st === 'partial' ? 'partial' : ''}" data-id="${t.id}">
+      <button class="check ${st}" data-act="toggle-task" data-id="${t.id}" aria-label="${nextLabel}">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
       </button>
       <div class="body">
         <div class="title">${esc(t.title)}</div>
-        ${t.timeLabel || t.react ? `<div class="meta">
+        ${t.timeLabel || t.priority === 'important' ? `<div class="meta">
           ${t.timeLabel ? `<span class="badge-time num">${esc(t.timeLabel)}</span>` : ''}
           ${t.priority === 'important' ? '<span class="prio"></span><span>important</span>' : ''}
         </div>` : ''}
@@ -1246,7 +1259,7 @@ function monthStats(base) {
         pTot++;
         if (r && r.status !== 'missed') pOk++;
       }
-      for (const t of planFor(mem.id, day)) { tTot++; if (t.done) tDone++; }
+      for (const t of planFor(mem.id, day)) { tTot++; if (isDone(t)) tDone++; }
       const rv = reviewFor(mem.id, day);
       if (rv) {
         recorded = true;
@@ -1358,7 +1371,8 @@ function viewSettings() {
     </div>
 
     <div class="group">
-      ${row('method', '🕌', 'Prayer calculation', METHODS[S.settings.method]?.label || 'Muslim World League')}
+      ${row('source', '🕌', 'Prayer times', S.settings.preset === 'cluj' ? 'Masjid Cluj-Napoca · Mawaqit' : `Calculated · ${METHODS[S.settings.method]?.label || ''}`)}
+      ${!S.settings.preset ? row('method', '⚙️', 'Calculation method', METHODS[S.settings.method]?.label || 'Muslim World League') : ''}
       ${row('location', '📍', 'Location', S.settings.place, '')}
       ${row('times-today', '🕰', "Today's times", '', '')}
     </div>
@@ -1644,10 +1658,11 @@ function sheetItem(id) {
   if (!t) return;
   const who = actor();
   const mine = t.memberId === who.id;
+  const stateLabel = { todo: 'not done', partial: 'partly done', done: 'done' }[taskState(t)];
   openSheet(`
     <div class="grip"></div>
     <h3>${esc(t.title)}</h3>
-    <p class="sheet-sub">${mine ? 'Your task' : 'Their task'} · ${t.done ? 'done' : 'open'}</p>
+    <p class="sheet-sub">${mine ? 'Your task' : 'Their task'} · ${stateLabel}</p>
     <div class="sheet-list">
       ${mine ? `
         <form data-form="rename-task" data-id="${t.id}">
@@ -1657,9 +1672,12 @@ function sheetItem(id) {
             <button class="btn" type="submit">Rename</button>
           </div>
         </form>
-        <button class="sheet-opt" data-act="toggle-task" data-id="${t.id}">
-          <span class="lbl">${t.done ? 'Mark as not done' : 'Mark as done'}</span>
-        </button>
+        ${['todo', 'partial', 'done'].map((st) => `
+          <button class="sheet-opt" data-act="set-task-state" data-id="${t.id}" data-state="${st}" ${taskState(t) === st ? 'data-active="true"' : ''}>
+            <span class="sw" style="background:${st === 'done' ? 'var(--ok)' : st === 'partial' ? 'var(--late)' : 'var(--pending)'}"></span>
+            <span class="lbl">${st === 'todo' ? 'Not done' : st === 'partial' ? 'Partly done' : 'Done'}</span>
+            ${taskState(t) === st ? '✓' : ''}
+          </button>`).join('')}
         <button class="sheet-opt" data-act="prio-task" data-id="${t.id}">
           <span class="lbl">${t.priority === 'important' ? 'Remove importance' : 'Mark important'}</span>
         </button>
@@ -1751,6 +1769,27 @@ function sheetStartDate() {
       <input class="line" type="date" name="start" value="${statsStart()}">
       <button class="btn primary wide" type="submit" style="margin-top:12px">Save</button>
     </form>
+  `);
+}
+
+function sheetSource() {
+  const isCluj = S.settings.preset === 'cluj';
+  openSheet(`
+    <div class="grip"></div>
+    <h3>Prayer times</h3>
+    <p class="sheet-sub">Where the five times come from.</p>
+    <div class="sheet-list">
+      <button class="sheet-opt" data-act="pick-preset" data-preset="cluj" ${isCluj ? 'data-active="true"' : ''}>
+        <span class="sw" style="background:var(--ok)"></span>
+        <span class="lbl">Masjid Cluj-Napoca<span class="sub">Mawaqit timetable — the mosque's own times</span></span>
+        ${isCluj ? '✓' : ''}
+      </button>
+      <button class="sheet-opt" data-act="pick-preset" data-preset="" ${!isCluj ? 'data-active="true"' : ''}>
+        <span class="sw" style="background:var(--a)"></span>
+        <span class="lbl">Calculated from my location<span class="sub">${esc(S.settings.place)} · ${METHODS[S.settings.method]?.label || ''}</span></span>
+        ${!isCluj ? '✓' : ''}
+      </button>
+    </div>
   `);
 }
 
@@ -1962,15 +2001,30 @@ const ACTIONS = {
   'toggle-task': async (el) => {
     const t = S.plan.find((x) => x.id === el.dataset.id);
     if (!t) return;
-    t.done = !t.done;
-    t.doneAt = t.done ? Date.now() : null;
+    const order = ['todo', 'partial', 'done'];
+    const next = order[(order.indexOf(taskState(t)) + 1) % 3];
+    t.progress = next;
+    t.done = next === 'done';
+    t.doneAt = next === 'done' ? Date.now() : null;
     await savePlan(t);
-    haptic(t.done ? 12 : 6);
+    haptic(next === 'done' ? 12 : 6);
     closeSheetIfOpen();
     refresh();
   },
 
   'task-menu': (el) => sheetItem(el.dataset.id),
+
+  'set-task-state': async (el) => {
+    const t = S.plan.find((x) => x.id === el.dataset.id);
+    if (!t) return;
+    const st = el.dataset.state;
+    t.progress = st;
+    t.done = st === 'done';
+    t.doneAt = st === 'done' ? Date.now() : null;
+    await savePlan(t);
+    closeSheet();
+    refresh();
+  },
 
   'prio-task': async (el) => {
     const t = S.plan.find((x) => x.id === el.dataset.id);
@@ -2041,6 +2095,21 @@ const ACTIONS = {
   preview: () => { S.viewingAs = isPreview() ? null : other(me()).id; S.planTab = 'mine'; refresh(); },
 
   method: () => sheetMethod(),
+  source: () => sheetSource(),
+  'pick-preset': async (el) => {
+    const preset = el.dataset.preset || null;
+    S.settings.preset = preset;
+    if (preset === 'cluj') {
+      S.settings.place = 'Cluj-Napoca';
+      S.settings.lat = 46.7612026;
+      S.settings.lng = 23.5781945;
+    }
+    timeCache.clear();
+    await db.put('meta', { key: 'settings', value: S.settings });
+    closeSheet();
+    refresh();
+    toast(preset === 'cluj' ? 'Times from Masjid Cluj-Napoca' : 'Times calculated from location');
+  },
   location: () => sheetLocation(),
   'start-date': () => sheetStartDate(),
   'times-today': () => sheetTimes(),
@@ -2237,6 +2306,7 @@ document.addEventListener('submit', async (e) => {
       title,
       timeLabel: String(data.time || '').trim(),
       priority: 'normal',
+      progress: 'todo',
       done: false,
       doneAt: null,
       position: list.length ? list[list.length - 1].position + 1 : 0,

@@ -289,7 +289,6 @@ input,textarea,select{font:inherit;color:inherit;}
 .q-tail{fill:var(--line-2);}
 .q-hub{fill:var(--ink);}
 .q-dial-wrap.aligned{transform:scale(1.015);}
-.q-dial-wrap.aligned .q-needle{filter:drop-shadow(0 0 12px color-mix(in srgb, var(--pink) 75%, transparent));}
 .q-readout{font-family:var(--serif);font-size:30px;letter-spacing:-.02em;line-height:1;text-align:center;}
 .q-readout span{font-size:13px;color:var(--ink-3);font-family:var(--font);letter-spacing:.1em;text-transform:uppercase;margin-left:5px;}
 .q-live{font-size:13px;color:var(--ink-3);margin-top:9px;min-height:18px;text-align:center;}

@@ -10,13 +10,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '2.2.1';
+const APP_VERSION = '2.2.2';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '2.2.2', at: '15 Nov 2026', notes: "The compass follows one sensor stream and paints once per frame." },
   { v: '2.2.1', at: '15 Nov 2026', notes: "Qibla renders correctly from the first paint, and assets are versioned." },
   { v: '2.2.0', at: '15 Nov 2026', notes: "A Qibla compass that points to the Kaaba." },
   { v: '2.1.3', at: '15 Nov 2026', notes: "The app now lives at a permanent address." },
@@ -1111,42 +1112,76 @@ function attachCompass(sheet, bearing) {
   const live = sheet.querySelector('#qLive');
   const note = sheet.querySelector('#qNote');
   const perm = sheet.querySelector('#qPerm');
+
   let heard = false;
+  let pending = null;
+  let frame = 0;
+  let lastText = '';
+  let lastAligned = null;
+  let lastAccuracy = '';
 
-  if (perm && typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-    perm.hidden = false;
-  }
+  const paint = () => {
+    frame = 0;
+    if (pending == null) return;
+    const heading = pending;
+    pending = null;
 
-  const onOrient = (e) => {
-    let heading = null;
-    if (typeof e.webkitCompassHeading === 'number' && e.webkitCompassHeading >= 0) heading = e.webkitCompassHeading;
-    else if (typeof e.alpha === 'number' && e.alpha !== null) heading = 360 - e.alpha;
-    if (heading == null) return;
-
-    heard = true;
-    heading = ((heading % 360) + 360) % 360;
     dial.setAttribute('transform', `rotate(${-heading.toFixed(1)} 120 120)`);
 
     const delta = ((bearing - heading + 540) % 360) - 180;
     const abs = Math.abs(delta);
     const aligned = abs < 6;
-    wrap.classList.toggle('aligned', aligned);
-    live.textContent = aligned
-      ? 'Facing the Qibla'
-      : `Turn ${Math.round(abs)}° ${delta > 0 ? 'right' : 'left'}`;
-    live.classList.toggle('ok', aligned);
 
-    if (typeof e.webkitCompassAccuracy === 'number' && e.webkitCompassAccuracy >= 0) {
-      note.textContent = `Compass accuracy ±${Math.round(e.webkitCompassAccuracy)}°.`;
+    if (aligned !== lastAligned) {
+      lastAligned = aligned;
+      wrap.classList.toggle('aligned', aligned);
+      live.classList.toggle('ok', aligned);
+    }
+
+    const text = aligned ? 'Facing the Qibla' : `Turn ${Math.round(abs)}° ${delta > 0 ? 'right' : 'left'}`;
+    if (text !== lastText) {
+      lastText = text;
+      live.textContent = text;
     }
   };
 
-  window.addEventListener('deviceorientationabsolute', onOrient, true);
-  window.addEventListener('deviceorientation', onOrient, true);
+  const onOrient = (e) => {
+    // One source only: iOS's true heading, or Chrome's absolute alpha.
+    // The ordinary `deviceorientation` alpha is relative and causes the
+    // needle to fight itself — that was the lag.
+    let heading = null;
+    if (typeof e.webkitCompassHeading === 'number' && e.webkitCompassHeading >= 0) {
+      heading = e.webkitCompassHeading;
+    } else if (e.type === 'deviceorientationabsolute' || e.absolute === true) {
+      if (typeof e.alpha === 'number' && e.alpha !== null) heading = 360 - e.alpha;
+    }
+    if (heading == null) return;
+
+    heard = true;
+    pending = ((heading % 360) + 360) % 360;
+    if (!frame) frame = requestAnimationFrame(paint);
+
+    const acc = e.webkitCompassAccuracy;
+    if (typeof acc === 'number' && acc >= 0) {
+      const msg = `Compass accuracy ±${Math.round(acc)}°`;
+      if (msg !== lastAccuracy) {
+        lastAccuracy = msg;
+        note.textContent = msg;
+      }
+    }
+  };
+
+  window.addEventListener('deviceorientationabsolute', onOrient, { capture: true, passive: true });
+  window.addEventListener('deviceorientation', onOrient, { capture: true, passive: true });
+
   compassStop = () => {
     window.removeEventListener('deviceorientationabsolute', onOrient, true);
     window.removeEventListener('deviceorientation', onOrient, true);
+    if (frame) cancelAnimationFrame(frame);
+    frame = 0;
   };
+
+  if (perm) perm.hidden = !(typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function');
 
   setTimeout(() => {
     if (!heard) {

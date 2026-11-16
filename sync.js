@@ -203,10 +203,12 @@ function buildPayload() {
     reviews: [...queue.reviews.values()].map((r) => toWire('reviews', r)),
     reactions: [...queue.reactions.values()].map((r) => toWire('reactions', r)),
     members: [...queue.members.values()].map((r) => toWire('members', r)),
+    goals: [...queue.goals.values()].map((r) => toWire('goals', r)),
     deletes: [...queue.deletes.values()],
   };
   const empty = !payload.prayers.length && !payload.plan.length && !payload.reviews.length
-    && !payload.reactions.length && !payload.members.length && !payload.deletes.length;
+    && !payload.reactions.length && !payload.members.length && !payload.goals.length
+    && !payload.deletes.length;
   return empty ? null : payload;
 }
 

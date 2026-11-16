@@ -11,13 +11,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '2.6.0';
+const APP_VERSION = '2.6.1';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '2.6.1', at: '16 Nov 2026', notes: "Goals travel too — and the sync queue now clears after every push." },
   { v: '2.6.0', at: '16 Nov 2026', notes: "Cloud sync is connected — two phones, one life." },
   { v: '2.5.1', at: '16 Nov 2026', notes: "One scroll container for the avatar picker, and a confirmation when it saves." },
   { v: '2.5.0', at: '16 Nov 2026', notes: "Forty-eight avatars, in a picker that scrolls." },

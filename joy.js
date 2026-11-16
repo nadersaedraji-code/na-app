@@ -2625,7 +2625,7 @@ export function createJoy(ctx) {
         toast('Location added — save it');
       }, () => toast('Location was not allowed'), { enableHighAccuracy: false, timeout: 8000 });
     },
-    cover: async (el) => { await saveSettings({ cover: el.dataset.cover }); closeSheet(true); openJoySettings(); toast('Cover changed'); },
+    cover: async (el) => { await saveSettings({ cover: el.dataset.cover }); refresh(); closeSheet(true); openJoySettings(); toast('Cover changed'); },
     'notify-toggle': async () => {
       const s = joySettings();
       await saveSettings({ notify: !s.notify });
@@ -2840,6 +2840,7 @@ export function createJoy(ctx) {
       try {
         const data = await compressImage(files[0], 1600, 0.76);
         await saveSettings({ cover: data });
+        refresh();
         closeSheet(true);
         openJoySettings();
         toast('Cover changed');

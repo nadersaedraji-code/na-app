@@ -11,13 +11,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '3.0.1';
+const APP_VERSION = '3.1.0';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '3.1.0', at: '16 Nov 2026', notes: "The reminder bell lives on Home, and it travels through the app." },
   { v: '3.0.1', at: '16 Nov 2026', notes: "The period option is now inside the prayer sheet too." },
   { v: '3.0.0', at: '16 Nov 2026', notes: "Paper grain, deeper light, and the mosque, cycle and nudge options." },
   { v: '2.7.0', at: '16 Nov 2026', notes: "Reminders that say when they're blocked, and notifications worth tapping." },
@@ -1370,11 +1371,16 @@ function viewHome() {
   return `
     <header class="home-head">
       <div class="mark"><i></i><i></i><span>N &amp; A</span></div>
-      <button class="icon-btn" data-act="open-settings" aria-label="Settings">
-        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4 7h5M13 7h7M4 17h9M17 17h3"/><circle cx="11" cy="7" r="2"/><circle cx="15" cy="17" r="2"/>
-        </svg>
-      </button>
+      <div class="home-actions">
+        <button class="icon-btn" data-act="send-ping" aria-label="Send a notification">
+          ${I.bell}
+        </button>
+        <button class="icon-btn" data-act="open-settings" aria-label="Settings">
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 7h5M13 7h7M4 17h9M17 17h3"/><circle cx="11" cy="7" r="2"/><circle cx="15" cy="17" r="2"/>
+          </svg>
+        </button>
+      </div>
     </header>
 
     <div class="hello">
@@ -2290,7 +2296,7 @@ function viewSettings() {
 
     <div class="group">
       ${p ? row('edit-partner', I.heart, 'Partner', `${esc(p.name)} · joined ${new Date(p.joinedAt).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' })}`) : ''}
-      ${p ? row('nudge', I.bell, 'Send a nudge', 'A quiet reminder — the app speaks, not you') : ''}
+      ${p ? row('nudge', I.bell, 'Send a notification', 'Arrives as the app speaking — no name attached') : ''}
       ${row('sync', I.link, sync.isOn() ? 'Two phones connected' : 'Connect the other phone', syncLine())}
       ${p ? row('preview', I.eye, isPreview() ? 'Exit partner view' : 'Preview as ' + esc(p.name), 'See the app from their side') : ''}
     </div>
@@ -2401,29 +2407,53 @@ async function applyRemoteChange() {
 }
 
 /** A nudge arrives as the app speaking — never as the partner's name. */
-async function deliverNudges() {
-  const who = me();
-  if (!who) return;
-  const now = Date.now();
-  const fresh = S.nudges.filter((n) => n.to === who.id && !n.seenAt && now - (n.createdAt || 0) < 2 * 3600 * 1000);
-  for (const n of fresh) {
-    await notify('A quiet nudge', 'The app thinks you should take a moment.', `nudge-${n.id}`);
-    n.seenAt = Date.now();
-    await db.put('nudges', n);
-  }
-}
-
 async function sendNudge() {
   const who = me();
   const partner = other(who);
   if (!partner) return toast('No partner yet');
-  if (!sync.isOn()) return toast('Pair the phones first — then nudges travel');
-  const rec = { id: uid(), from: who.id, to: partner.id, createdAt: Date.now(), seenAt: null };
-  S.nudges.push(rec);
-  await db.put('nudges', rec);
+  if (!sync.isOn()) return toast('Pair the phones first — then it can travel');
+
+  const rec = {
+    id: uid(),
+    from: who.id,
+    targetType: 'ping',
+    targetId: partner.id,
+    emoji: '🔔',
+    day: dayKey(),
+    createdAt: Date.now(),
+  };
+  S.reactions.push(rec);
+  await db.put('reactions', rec);
   haptic(14);
-  toast('Nudge sent');
+  toast('Sent — quietly');
 }
+
+const lastPingSeen = () => {
+  const v = Number(localStorage.getItem('na:pingSeen') || 0);
+  if (!v) {
+    const now = Date.now();
+    try { localStorage.setItem('na:pingSeen', String(now)); } catch { /* ignore */ }
+    return now;
+  }
+  return v;
+};
+
+/** Delivers a partner's ping as the app speaking — never with a name. */
+async function deliverPings() {
+  const who = me();
+  if (!who) return;
+  const since = lastPingSeen();
+  const pings = S.reactions.filter(
+    (r) => r.targetType === 'ping' && r.targetId === who.id && (r.createdAt || 0) > since
+  );
+  if (!pings.length) return;
+
+  const latest = Math.max(...pings.map((p) => p.createdAt || 0));
+  try { localStorage.setItem('na:pingSeen', String(latest)); } catch { /* ignore */ }
+  await notify('A quiet reminder', 'The app has a moment for you.', `ping-${latest}`);
+}
+
+async function deliverNudges() { await deliverPings(); }
 
 /** Keep exactly two members: me, and the real other half.
     A member that came from the server always beats a local placeholder,
@@ -3117,6 +3147,7 @@ const ACTIONS = {
   qibla: () => sheetQibla(),
 
   nudge: () => sendNudge(),
+  'send-ping': () => sendNudge(),
 
   'prayer-notifs': () => sheetPrayerNotifs(),
 

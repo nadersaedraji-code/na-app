@@ -6,17 +6,19 @@
 
 import * as db from './db.js';
 import * as sync from './sync.js';
+import { BACKEND } from './config.js';
 import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '2.5.1';
+const APP_VERSION = '2.6.0';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '2.6.0', at: '16 Nov 2026', notes: "Cloud sync is connected — two phones, one life." },
   { v: '2.5.1', at: '16 Nov 2026', notes: "One scroll container for the avatar picker, and a confirmation when it saves." },
   { v: '2.5.0', at: '16 Nov 2026', notes: "Forty-eight avatars, in a picker that scrolls." },
   { v: '2.4.1', at: '16 Nov 2026', notes: "A test button that fires the urgent Isha notification." },
@@ -2228,13 +2230,17 @@ function makeKey() {
   return `NA-${body.slice(0, 4)}-${body.slice(4, 8)}-${body.slice(8, 12)}-${body.slice(12, 16)}-${body.slice(16, 20)}`;
 }
 
+const targetBackend = () =>
+  BACKEND ? { mode: 'supabase', url: BACKEND.url, apikey: BACKEND.apikey } : { mode: 'local' };
+
 async function createSharedSpace() {
-  if (!(await sync.probe())) {
+  const backend = targetBackend();
+  if (!BACKEND && !(await sync.probe(backend))) {
     closeSheet();
     return toast('Cloud sync is not set up yet — ask me to finish it');
   }
   const key = makeKey();
-  await sync.setConfig({ mode: 'local', key });
+  await sync.setConfig({ ...backend, key });
   closeSheet();
   toast('Creating your space…');
   await sync.begin(me());
@@ -2244,8 +2250,9 @@ async function createSharedSpace() {
 }
 
 async function joinSharedSpace(code) {
-  if (!(await sync.probe())) return toast('Cloud sync is not set up yet — ask me to finish it');
-  await sync.setConfig({ mode: 'local', key: code });
+  const backend = targetBackend();
+  if (!BACKEND && !(await sync.probe(backend))) return toast('Cloud sync is not set up yet — ask me to finish it');
+  await sync.setConfig({ ...backend, key: code });
   toast('Joining…');
   await sync.begin(me());
   await loadState();

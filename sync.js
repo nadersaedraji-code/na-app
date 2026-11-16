@@ -124,7 +124,7 @@ function fromWire(kind, w) {
     return { ...base, id: w.id, from: w.from_member, targetType: w.target_type, targetId: w.target_id, emoji: w.emoji, day: w.day };
   }
   if (kind === 'members') {
-    return { ...base, id: w.id, name: w.name, color: w.color, avatar: w.avatar, tz: w.tz, joinedAt: when(w.updated_at) || Date.now(), remote: true };
+    return { ...base, id: w.id, name: w.name || w.display_name, color: w.color, avatar: w.avatar, tz: w.tz, joinedAt: when(w.updated_at) || Date.now(), remote: true };
   }
   if (kind === 'goals') {
     return {
@@ -321,17 +321,22 @@ export function attach(handlers) {
 
 export function isBusy() { return busy; }
 
+/** The backend this device will talk to. */
+export function backend() {
+  if (cfg && cfg.mode === 'supabase' && cfg.url) return { mode: 'supabase', url: cfg.url, apikey: cfg.apikey };
+  if (cfg && cfg.mode === 'local') return { mode: 'local' };
+  return null;
+}
+
 /** Is a sync backend actually reachable? */
-export async function probe() {
+export async function probe(candidate = cfg) {
   try {
-    if (cfg?.mode === 'supabase') {
-      const url = `${(cfg.url || '').replace(/\/+$/, '')}/rest/v1/rpc/na_pull`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', apikey: cfg.apikey, Authorization: `Bearer ${cfg.apikey}` },
-        body: JSON.stringify({ p_key: cfg.key, p_since: '1970-01-01T00:00:00.000Z' }),
+    if (candidate?.mode === 'supabase') {
+      const base = (candidate.url || '').replace(/\/+$/, '');
+      const res = await fetch(`${base}/rest/v1/`, {
+        headers: { apikey: candidate.apikey, Authorization: `Bearer ${candidate.apikey}` },
       });
-      return res.ok;
+      return res.ok || res.status === 401 || res.status === 404;
     }
     const res = await fetch('/api/ping', { method: 'POST' });
     return res.ok;

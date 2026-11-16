@@ -11,13 +11,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '3.4.0';
+const APP_VERSION = '3.4.1';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '3.4.1', at: '16 Nov 2026', notes: "The bell now reaches the other phone — and waits there until they open the app." },
   { v: '3.4.0', at: '16 Nov 2026', notes: "The room follows the sky; the tab bar glides." },
   { v: '3.3.0', at: '16 Nov 2026', notes: "Custom messages, the day arc, and a kinder streak rule." },
   { v: '3.2.0', at: '16 Nov 2026', notes: "Period is a pink state on each prayer; the mosque is gold." },
@@ -2524,10 +2525,12 @@ async function joinSharedSpace(code) {
   toast('Connected');
 }
 
-function onRemoteChange() {
+async function onRemoteChange() {
   const el = document.activeElement;
   if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) {
     S.pendingRemote = true;
+    await loadState();
+    await deliverNudges();
     return;
   }
   applyRemoteChange();
@@ -2570,7 +2573,7 @@ function sheetPing() {
   openSheet(`
     <div class="grip"></div>
     <h3>Send a notification</h3>
-    <p class="sheet-sub">It arrives as the app speaking — your name stays out of it.</p>
+    <p class="sheet-sub">It arrives as the app speaking — your name stays out of it. It will find them the next time their app is open.</p>
     <form data-form="send-ping">
       <textarea class="area" name="message" maxlength="140" placeholder="Write something…" style="min-height:86px"></textarea>
       <div class="ping-phrases">
@@ -2582,30 +2585,50 @@ function sheetPing() {
   `, (sheet) => sheet.querySelector('textarea')?.focus());
 }
 
-const lastPingSeen = () => {
-  const v = Number(localStorage.getItem('na:pingSeen') || 0);
-  if (!v) {
-    const now = Date.now();
-    try { localStorage.setItem('na:pingSeen', String(now)); } catch { /* ignore */ }
-    return now;
-  }
-  return v;
-};
+const PING_SEEN_KEY = 'na:pingsSeen';
+const PING_WINDOW = 7 * 24 * 60 * 60 * 1000;
 
-/** Delivers a partner's ping as the app speaking — never with a name. */
+function seenPings() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PING_SEEN_KEY) || '[]');
+    return new Set(Array.isArray(raw) ? raw : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function rememberPings(ids) {
+  try {
+    const all = [...seenPings(), ...ids].slice(-200);
+    localStorage.setItem(PING_SEEN_KEY, JSON.stringify(all));
+  } catch { /* ignore */ }
+}
+
+/** Delivers a partner's ping as the app speaking — never with a name.
+    Delivered ids are remembered, so a message is never lost to clock skew
+    and one sent while the app was closed is waiting when it opens. */
 async function deliverPings() {
   const who = me();
   if (!who) return;
-  const since = lastPingSeen();
-  const pings = S.reactions.filter(
-    (r) => r.targetType === 'ping' && r.targetId === who.id && (r.createdAt || 0) > since
+  const seen = seenPings();
+  const floor = Date.now() - PING_WINDOW;
+  const at = (r) => r.createdAt || r.updatedAt || 0;
+  const pings = S.reactions.filter((r) =>
+    r.id &&
+    r.targetType === 'ping' &&
+    r.targetId === who.id &&
+    !seen.has(r.id) &&
+    (at(r) || Date.now()) >= floor
   );
   if (!pings.length) return;
 
-  const latest = Math.max(...pings.map((p) => p.createdAt || 0));
-  const withText = pings.filter((p) => p.emoji && p.emoji.trim()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))[0];
-  try { localStorage.setItem('na:pingSeen', String(latest)); } catch { /* ignore */ }
-  await notify('A quiet reminder', withText?.emoji?.slice(0, 140) || 'The app has a moment for you.', `ping-${latest}`);
+  const latest = Math.max(...pings.map(at));
+  const withText = pings
+    .filter((r) => r.emoji && r.emoji.trim())
+    .sort((a, b) => at(b) - at(a))[0];
+
+  rememberPings(pings.map((r) => r.id));
+  await notify('A quiet reminder', withText?.emoji?.slice(0, 140) || 'The app has a moment for you.', `ping-${latest || withText?.id || 'now'}`);
 }
 
 async function deliverNudges() { await deliverPings(); }
@@ -3109,7 +3132,7 @@ function sheetPrayerNotifs() {
         <span class="v" style="font-size:13px;color:var(--pink);font-weight:600">Send</span>
       </button>
     </div>
-    <p class="q-note">Alerts arrive while the app is open or in the background. Alerts with the app fully closed need the cloud switch-on.</p>
+    <p class="q-note">Alerts arrive while N&amp;A is open. If it's closed, your next reminder waits and appears when you return.</p>
   `);
 }
 

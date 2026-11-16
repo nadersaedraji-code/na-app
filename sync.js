@@ -127,7 +127,11 @@ function fromWire(kind, w) {
     };
   }
   if (kind === 'reactions') {
-    return { ...base, id: w.id, from: w.from_member, targetType: w.target_type, targetId: w.target_id, emoji: w.emoji, day: w.day };
+    return {
+      ...base, id: w.id, from: w.from_member, targetType: w.target_type,
+      targetId: w.target_id, emoji: w.emoji, day: w.day,
+      createdAt: when(w.created_at) || when(w.updated_at) || Date.now(),
+    };
   }
   if (kind === 'members') {
     return { ...base, id: w.id, name: w.name || w.display_name, color: w.color, avatar: w.avatar, tz: w.tz, joinedAt: when(w.updated_at) || Date.now(), remote: true };

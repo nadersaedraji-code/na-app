@@ -11,13 +11,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '3.4.1';
+const APP_VERSION = '3.4.2';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '3.4.2', at: '16 Nov 2026', notes: "Notification settings now say whether an alert was delivered or shown inside the app." },
   { v: '3.4.1', at: '16 Nov 2026', notes: "The bell now reaches the other phone — and waits there until they open the app." },
   { v: '3.4.0', at: '16 Nov 2026', notes: "The room follows the sky; the tab bar glides." },
   { v: '3.3.0', at: '16 Nov 2026', notes: "Custom messages, the day arc, and a kinder streak rule." },
@@ -1609,14 +1610,15 @@ async function notify(title, body, tag, extra = {}) {
     actions: extra.urgent && extra.prayer ? [{ action: 'log', title: `Log ${PMETA[extra.prayer].name}` }] : [],
   };
 
-  if (!('Notification' in window) || Notification.permission !== 'granted') {
-    toast(`${title} — ${body}`, 5200);
-    return 'blocked';
-  }
-
   const mark = (result) => {
     try { localStorage.setItem('na:lastNotif', JSON.stringify({ title, at: Date.now(), result })); } catch { /* ignore */ }
   };
+
+  if (!('Notification' in window) || Notification.permission !== 'granted') {
+    mark('blocked');
+    toast(`${title} — ${body}`, 5200);
+    return 'blocked';
+  }
 
   try {
     const reg = navigator.serviceWorker
@@ -2447,7 +2449,7 @@ function viewSettings() {
     </div>
 
     <div class="group">
-      ${row('prayer-notifs', I.bell, 'Prayer reminders', prayerNotifLine())}
+      ${row('prayer-notifs', I.bell, 'Notifications', prayerNotifLine())}
       ${toggle('review', 'Evening review', 'A prompt to close the day')}
       ${toggle('partner', 'From your partner', 'Reactions and notes')}
     </div>
@@ -3081,7 +3083,7 @@ function prayerNotifLine() {
   const n = S.settings.notif || {};
   const prefs = n.prayers || {};
   const on = PRAYER_ORDER.filter((k) => prefs[k] !== false).length;
-  return `${on} of 5 on · warning ${n.lead || 20} min before`;
+  return `${on} of 5 on · messages too`;
 }
 
 function sheetPrayerNotifs() {
@@ -3093,7 +3095,7 @@ function sheetPrayerNotifs() {
   let last = null;
   try { last = JSON.parse(localStorage.getItem('na:lastNotif') || 'null'); } catch { /* ignore */ }
   const lastLine = last
-    ? `Last sent ${Math.max(1, Math.round((Date.now() - last.at) / 60000))} min ago`
+    ? `${last.result === 'sent' ? 'Delivered' : last.result === 'blocked' ? 'Shown in the app' : 'Could not show'} · ${Math.max(1, Math.round((Date.now() - last.at) / 60000))} min ago`
     : 'Nothing sent yet';
   const stateText = perm === 'granted'
     ? 'Notifications allowed'
@@ -3103,8 +3105,8 @@ function sheetPrayerNotifs() {
 
   openSheet(`
     <div class="grip"></div>
-    <h3>Prayer reminders</h3>
-    <p class="sheet-sub">Each prayer speaks for itself — a nudge when its window opens, and an urgent one before it closes.</p>
+    <h3>Notifications</h3>
+    <p class="sheet-sub">One permission covers prayer reminders and quiet messages between the two of you.</p>
 
     <div class="notif-state ${perm}">
       <span class="dot"></span>

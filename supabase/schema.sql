@@ -134,6 +134,21 @@ create index if not exists cycles_couple_updated on cycles (couple_id, updated_a
 alter table cycles enable row level security;
 revoke all on cycles from anon, authenticated;
 
+-- Nudges: a reminder sent through the app, with no name attached.
+create table if not exists nudges (
+  id          text primary key,
+  couple_id   uuid not null references couples(id) on delete cascade,
+  from_member text,
+  to_member   text,
+  created_at  timestamptz,
+  seen_at     timestamptz,
+  updated_at  timestamptz not null default now(),
+  deleted_at  timestamptz
+);
+create index if not exists nudges_couple_updated on nudges (couple_id, updated_at);
+alter table nudges enable row level security;
+revoke all on nudges from anon, authenticated;
+
 -- Close the doors: the anon key alone can touch nothing.
 alter table couples     enable row level security;
 alter table members     enable row level security;
@@ -221,6 +236,9 @@ begin
     'cycles',
       coalesce((select jsonb_agg(to_jsonb(c)) from cycles c
                 where c.couple_id = cid and c.updated_at > p_since), '[]'::jsonb),
+    'nudges',
+      coalesce((select jsonb_agg(to_jsonb(n)) from nudges n
+                where n.couple_id = cid and n.updated_at > p_since), '[]'::jsonb),
     'deletes',
       coalesce((select jsonb_agg(jsonb_build_object('kind', t.kind, 'id', t.row_id)) from tombstones t
                 where t.couple_id = cid and t.deleted_at > p_since), '[]'::jsonb),
@@ -344,6 +362,19 @@ begin
     end loop;
   end if;
 
+  if jsonb_typeof(p_data->'nudges') = 'array' then
+    for r in select * from jsonb_array_elements(p_data->'nudges') loop
+      insert into nudges (id, couple_id, from_member, to_member, created_at, seen_at, updated_at)
+      values (r->>'id', cid, r->>'from_member', r->>'to_member',
+              nullif(r->>'created_at','')::timestamptz,
+              nullif(r->>'seen_at','')::timestamptz, clock)
+      on conflict (id) do update
+        set seen_at = coalesce(excluded.seen_at, nudges.seen_at),
+            updated_at = clock,
+            deleted_at = null;
+    end loop;
+  end if;
+
   if jsonb_typeof(p_data->'members') = 'array' then    for r in select * from jsonb_array_elements(p_data->'members') loop
       insert into members (id, couple_id, display_name, color, avatar, tz, updated_at)
       values (r->>'id', cid, r->>'name', r->>'color', r->>'avatar', r->>'tz', clock)
@@ -373,6 +404,8 @@ begin
         update goals set deleted_at = clock, updated_at = clock where id = d->>'id' and couple_id = cid;
       elsif d->>'kind' = 'cycles' then
         update cycles set deleted_at = clock, updated_at = clock where id = d->>'id' and couple_id = cid;
+      elsif d->>'kind' = 'nudges' then
+        update nudges set deleted_at = clock, updated_at = clock where id = d->>'id' and couple_id = cid;
       end if;
     end loop;
   end if;

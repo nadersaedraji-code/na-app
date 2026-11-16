@@ -11,13 +11,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '2.7.0';
+const APP_VERSION = '3.0.0';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '3.0.0', at: '16 Nov 2026', notes: "Paper grain, deeper light, and the mosque, cycle and nudge options." },
   { v: '2.7.0', at: '16 Nov 2026', notes: "Reminders that say when they're blocked, and notifications worth tapping." },
   { v: '2.6.2', at: '16 Nov 2026', notes: "One tap to start counting tomorrow." },
   { v: '2.6.1', at: '16 Nov 2026', notes: "Goals travel too — and the sync queue now clears after every push." },
@@ -217,6 +218,8 @@ const S = {
   reviews: [],
   reactions: [],
   goals: [],
+  cycles: [],
+  nudges: [],
   settings: { ...DEFAULTS },
   viewerId: null,
   viewingAs: null,
@@ -332,6 +335,32 @@ async function savePrayer(memberId, day, key, status) {
   return rec;
 }
 
+/** Create or patch one prayer record (status, mosque, …). */
+async function patchPrayer(memberId, day, key, patch) {
+  const id = `${memberId}|${day}|${key}`;
+  let rec = S.prayers.find((p) => p.id === id);
+  if (!rec) {
+    rec = { id, memberId, day, key, status: 'ontime', mosque: false, demo: false };
+    S.prayers.push(rec);
+  }
+  Object.assign(rec, patch, { loggedAt: Date.now(), demo: false });
+  await db.put('prayers', rec);
+  return rec;
+}
+
+async function toggleCycleDay(memberId, day) {
+  const existing = S.cycles.find((c) => c.memberId === memberId && c.day === day);
+  if (existing) {
+    S.cycles = S.cycles.filter((c) => c.id !== existing.id);
+    await db.del('cycles', existing.id);
+    return false;
+  }
+  const rec = { id: `${memberId}|${day}`, memberId, day, createdAt: Date.now() };
+  S.cycles.push(rec);
+  await db.put('cycles', rec);
+  return true;
+}
+
 async function savePlan(item) {
   const i = S.plan.findIndex((t) => t.id === item.id);
   if (i >= 0) S.plan[i] = item;
@@ -379,6 +408,7 @@ async function boot() {
   } else {
     showApp();
     startPrayerWatch();
+    deliverNudges();
     const logParam = new URLSearchParams(location.search).get('log');
     if (logParam) {
       history.replaceState(null, '', location.pathname + location.hash);
@@ -419,6 +449,8 @@ async function loadState() {
   S.reviews = d.reviews || [];
   S.reactions = d.reactions || [];
   S.goals = d.goals || [];
+  S.cycles = d.cycles || [];
+  S.nudges = d.nudges || [];
   S.settings = { ...DEFAULTS, ...(S.meta.settings?.value || {}) };
   S.settings.notif = { ...DEFAULTS.notif, ...(S.settings.notif || {}) };
   S.viewerId = d.meta?.app?.viewerId || S.members[0]?.id || null;
@@ -788,18 +820,25 @@ function weekStats(w) {
   const isDone = (t) => taskState(t) === 'done';
 
   const per = S.members.map((m) => {
-    let ontime = 0, late = 0, missed = 0, tasksDone = 0, tasksTotal = 0, perfect = 0;
+    let ontime = 0, late = 0, missed = 0, tasksDone = 0, tasksTotal = 0, perfect = 0, excused = 0;
     let prod = 0, prodN = 0, hap = 0, hapN = 0;
     const wins = [];
 
     for (const day of days) {
-      for (const k of PRAYER_ORDER) {
-        const st = getPrayer(m.id, day, k)?.status;
-        if (st === 'ontime') ontime++;
-        else if (st === 'late') late++;
-        else if (st === 'missed') missed++;
+      const excusedHere = isExcused(m.id, day);
+      if (excusedHere) excused++;
+      else {
+        for (const k of PRAYER_ORDER) {
+          const st = getPrayer(m.id, day, k)?.status;
+          if (st === 'ontime') ontime++;
+          else if (st === 'late') late++;
+          else if (st === 'missed') missed++;
+        }
+        if (PRAYER_ORDER.every((k) => {
+          const r = getPrayer(m.id, day, k);
+          return r && (r.status === 'ontime' || r.mosque === true);
+        })) perfect++;
       }
-      if (PRAYER_ORDER.every((k) => getPrayer(m.id, day, k)?.status === 'ontime')) perfect++;
       for (const t of planFor(m.id, day)) {
         tasksTotal++;
         if (isDone(t)) tasksDone++;
@@ -814,7 +853,7 @@ function weekStats(w) {
 
     return {
       member: m, ontime, late, missed, kept: ontime + late,
-      tasksDone, tasksTotal, perfect,
+      tasksDone, tasksTotal, perfect, excused,
       prod: prodN ? prod / prodN : null,
       hap: hapN ? hap / hapN : null,
       wins,
@@ -933,6 +972,7 @@ function sheetRecap(index) {
             <span><b class="num">${p.late}</b> late</span>
             <span><b class="num">${p.missed}</b> missed</span>
             <span><b class="num">${p.perfect}</b> perfect</span>
+            ${p.excused ? `<span><b class="num">${p.excused}</b> excused</span>` : ''}
             <span><b class="num">${p.tasksDone}/${p.tasksTotal}</b> tasks</span>
             ${p.prod != null ? `<span><b class="num">${p.prod.toFixed(1)}</b> focus</span>` : ''}
             ${p.hap != null ? `<span><b class="num">${p.hap.toFixed(1)}</b> mood</span>` : ''}
@@ -953,17 +993,25 @@ function sheetRecap(index) {
   `);
 }
 
-/** Days where all five prayers were logged on time. */
+/** Days where all five prayers were logged on time — or at the mosque. */
 function perfectDays(memberId) {
   const tally = new Map();
   for (const r of S.prayers) {
     if (r.memberId !== memberId) continue;
-    if (r.status !== 'ontime') continue;
+    if (r.status !== 'ontime' && r.mosque !== true) continue;
     tally.set(r.day, (tally.get(r.day) || 0) + 1);
   }
+  const excused = excusedDays(memberId);
   const out = new Set();
-  for (const [day, n] of tally) if (n >= 5) out.add(day);
+  for (const [day, n] of tally) if (n >= 5 && !excused.has(day)) out.add(day);
   return out;
+}
+
+const isExcused = (memberId, day) =>
+  S.cycles.some((c) => c.memberId === memberId && c.day === day);
+
+function excusedDays(memberId) {
+  return new Set(S.cycles.filter((c) => c.memberId === memberId).map((c) => c.day));
 }
 
 /**
@@ -973,22 +1021,31 @@ function perfectDays(memberId) {
  */
 function streakOf(memberId) {
   const perfect = perfectDays(memberId);
+  const excused = excusedDays(memberId);
   const start = statsStart();
   const today = dayKey();
 
   let cursor = parseDay(today);
-  if (!perfect.has(today)) cursor = addDays(cursor, -1);
+  if (!perfect.has(today) && !excused.has(today)) cursor = addDays(cursor, -1);
 
   let current = 0;
-  while (dayKey(cursor) >= start && perfect.has(dayKey(cursor))) {
-    current++;
-    cursor = addDays(cursor, -1);
+  while (dayKey(cursor) >= start) {
+    const k = dayKey(cursor);
+    if (excused.has(k)) { cursor = addDays(cursor, -1); continue; }
+    if (perfect.has(k)) {
+      current++;
+      cursor = addDays(cursor, -1);
+    } else {
+      break;
+    }
   }
 
   let best = 0;
   let run = 0;
   for (let d = parseDay(start); dayKey(d) <= today; d = addDays(d, 1)) {
-    if (perfect.has(dayKey(d))) {
+    const k = dayKey(d);
+    if (excused.has(k)) continue;
+    if (perfect.has(k)) {
       run++;
       if (run > best) best = run;
     } else {
@@ -996,7 +1053,7 @@ function streakOf(memberId) {
     }
   }
 
-  return { current, best: Math.max(best, current) };
+  return { current, best: Math.max(best, current), excusedToday: excused.has(today) };
 }
 
 const flameSvg = (size = 16) =>
@@ -1018,6 +1075,7 @@ function streakCard() {
       on: perfect.has(k),
       today: i === 0,
       before: k < start,
+      excused: i === 0 && s.excusedToday,
     });
   }
 
@@ -1030,7 +1088,7 @@ function streakCard() {
         </div>
         <div class="streak-text">
           <div class="streak-k">day streak</div>
-          <div class="streak-d">${s.current ? 'Every prayer, on time' : 'Five on-time prayers starts it'}</div>
+          <div class="streak-d">${s.excusedToday ? 'Excused today — the streak is safe' : s.current ? 'Every prayer, on time' : 'Five on-time prayers starts it'}</div>
         </div>
         ${s.best > s.current ? `<div class="streak-best"><span>best</span><b class="num">${s.best}</b></div>` : ''}
       </div>
@@ -1038,7 +1096,7 @@ function streakCard() {
         ${week.map((d) => `
           <div class="sw">
             <span class="l">${d.letter}</span>
-            <i class="${d.on ? 'on' : d.today && !d.before ? 'today' : ''}" ${d.before ? 'style="opacity:.35"' : ''}></i>
+            <i class="${d.on ? 'on' : d.excused ? 'excused' : d.today && !d.before ? 'today' : ''}" ${d.before ? 'style="opacity:.35"' : ''}></i>
           </div>`).join('')}
       </div>
     </section>`;
@@ -1447,6 +1505,8 @@ function checkPrayerNotifications() {
   if (!who) return;
 
   const day = dayKey();
+  if (isExcused(who.id, day)) return;
+
   const t = times(day);
   const now = new Date();
   const lead = n.lead || 20;
@@ -1487,6 +1547,7 @@ function startPrayerWatch() {
 
 /** The prayer whose on-time window closes soonest, if still unlogged. */
 function closingSoon(memberId) {
+  if (isExcused(memberId, dayKey())) return null;
   const t = times(dayKey());
   const now = new Date();
   for (const k of PRAYER_ORDER) {
@@ -1513,7 +1574,12 @@ function viewPrayer() {
   const np = nextPrayer(t);
   const streak = streakOf(who.id);
   const soon = closingSoon(who.id);
+  const excused = isExcused(who.id, today);
   const C = 2 * Math.PI * 52;
+
+  const capAngle = -Math.PI / 2 + (onTime / 5) * Math.PI * 2;
+  const capX = 64 + Math.cos(capAngle) * 52;
+  const capY = 64 + Math.sin(capAngle) * 52;
 
   const ring = `
     <div class="ring-wrap">
@@ -1528,6 +1594,7 @@ function viewPrayer() {
         <circle class="fg" cx="64" cy="64" r="52"
           stroke-dasharray="${C.toFixed(1)}"
           stroke-dashoffset="${(C * (1 - onTime / 5)).toFixed(1)}"></circle>
+        ${onTime > 0 ? `<circle class="cap" cx="${capX.toFixed(1)}" cy="${capY.toFixed(1)}" r="4.4"></circle>` : ''}
       </svg>
       <div class="ring-label">
         <div class="big num">${onTime}<span style="color:var(--ink-3);font-size:18px">/5</span></div>
@@ -1545,7 +1612,7 @@ function viewPrayer() {
         <span class="glyph">${state === 'ontime' ? '✓' : state === 'late' ? '◔' : state === 'missed' ? '✕' : '○'}</span>
         <span class="meta">
           <span class="name">${PMETA[k].name}<span class="ar">${PMETA[k].ar}</span></span>
-          <span class="window num">${fmtTime(t[k])} – ${fmtTime(t.onTimeEnd[k])}</span>
+          <span class="window num">${rec?.mosque ? `<span class="mosque-ico">${I.mosque}</span>` : ''}${fmtTime(t[k])} – ${fmtTime(t.onTimeEnd[k])}</span>
         </span>
         <span class="pill ${state}"><span class="dot"></span>${STATUS_LABEL[state]}</span>
       </button>`;
@@ -1557,7 +1624,7 @@ function viewPrayer() {
         <span class="avatar" style="box-shadow:0 0 0 2px ${p.color}44">${p.avatar}</span>
         <span>
           <span class="name">${esc(p.name)}</span>
-          <span class="count num">${prayerCount(p.id, today)} of 5 · today</span>
+          <span class="count num">${isExcused(p.id, today) ? 'excused today' : `${prayerCount(p.id, today)} of 5 · today`}</span>
         </span>
       </div>
       <div class="mini-prayers">
@@ -1604,6 +1671,13 @@ function viewPrayer() {
     </div>
 
     <div class="prayers stagger">${rows}</div>
+
+    ${excused ? '<div class="excused-bar"><span class="dot"></span>Excused today — prayers are not counted</div>' : ''}
+
+    <button class="cycle-toggle ${excused ? 'on' : ''}" data-act="toggle-cycle">
+      <span class="cy-dot"></span>
+      <span>${excused ? 'Excused today · tap to undo' : 'On my period · prayers excused'}</span>
+    </button>
 
     ${qiblaStrip()}
 
@@ -2095,11 +2169,13 @@ function monthStats(base) {
     if (day < start) continue;
     let recorded = false;
     for (const mem of S.members) {
-      for (const k of PRAYER_ORDER) {
-        if (!isDue(day, k)) continue;
-        const r = getPrayer(mem.id, day, k);
-        pTot++;
-        if (r && r.status !== 'missed') pOk++;
+      if (!isExcused(mem.id, day)) {
+        for (const k of PRAYER_ORDER) {
+          if (!isDue(day, k)) continue;
+          const r = getPrayer(mem.id, day, k);
+          pTot++;
+          if (r && r.status !== 'missed') pOk++;
+        }
       }
       for (const t of planFor(mem.id, day)) { tTot++; if (isDone(t)) tDone++; }
       const rv = reviewFor(mem.id, day);
@@ -2145,6 +2221,9 @@ function calendarHTML(base, a, b) {
     // Nothing before the start date, nothing in the future.
     const inactive = k < start || dt > new Date();
     const marks = [a, b].filter(Boolean).map((mem) => {
+      if (isExcused(mem.id, k)) {
+        return `<i class="ex"><b style="width:100%;background:${mem.color}"></b></i>`;
+      }
       const n = prayerCount(mem.id, k);
       return `<i><b style="width:${(n / 5) * 100}%;background:${mem.color}"></b></i>`;
     }).join('');
@@ -2210,6 +2289,7 @@ function viewSettings() {
 
     <div class="group">
       ${p ? row('edit-partner', I.heart, 'Partner', `${esc(p.name)} · joined ${new Date(p.joinedAt).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' })}`) : ''}
+      ${p ? row('nudge', I.bell, 'Send a nudge', 'A quiet reminder — the app speaks, not you') : ''}
       ${row('sync', I.link, sync.isOn() ? 'Two phones connected' : 'Connect the other phone', syncLine())}
       ${p ? row('preview', I.eye, isPreview() ? 'Exit partner view' : 'Preview as ' + esc(p.name), 'See the app from their side') : ''}
     </div>
@@ -2313,9 +2393,35 @@ async function applyRemoteChange() {
   S.pendingRemote = false;
   await loadState();
   await reconcileMembers();
+  await deliverNudges();
   S.suppressAnim = true;
   refresh();
   S.suppressAnim = false;
+}
+
+/** A nudge arrives as the app speaking — never as the partner's name. */
+async function deliverNudges() {
+  const who = me();
+  if (!who) return;
+  const now = Date.now();
+  const fresh = S.nudges.filter((n) => n.to === who.id && !n.seenAt && now - (n.createdAt || 0) < 2 * 3600 * 1000);
+  for (const n of fresh) {
+    await notify('A quiet nudge', 'The app thinks you should take a moment.', `nudge-${n.id}`);
+    n.seenAt = Date.now();
+    await db.put('nudges', n);
+  }
+}
+
+async function sendNudge() {
+  const who = me();
+  const partner = other(who);
+  if (!partner) return toast('No partner yet');
+  if (!sync.isOn()) return toast('Pair the phones first — then nudges travel');
+  const rec = { id: uid(), from: who.id, to: partner.id, createdAt: Date.now(), seenAt: null };
+  S.nudges.push(rec);
+  await db.put('nudges', rec);
+  haptic(14);
+  toast('Nudge sent');
 }
 
 /** Keep exactly two members: me, and the real other half.
@@ -2437,6 +2543,11 @@ function sheetStatus(key) {
           <span class="lbl">${label}<span class="sub">${sub}</span></span>
           ${rec?.status === val ? '<span style="color:var(--ink-2)">✓</span>' : ''}
         </button>`).join('')}
+      <button class="sheet-opt" data-act="toggle-mosque" data-key="${key}">
+        <span class="sw" style="background:var(--ok)"></span>
+        <span class="lbl">Prayed at the mosque<span class="sub">Counts for the streak even if late</span></span>
+        <span class="switch" role="switch" aria-checked="${!!rec?.mosque}"></span>
+      </button>
       <button class="sheet-opt cancel" data-act="close">Cancel</button>
     </div>
   `);
@@ -2463,20 +2574,23 @@ function sheetDay(day) {
 
   const person = (m) => {
     const rv = reviewFor(m.id, day);
+    const excused = isExcused(m.id, day);
     return `
       <div class="person">
         <div class="person-head">
           <span class="av">${m.avatar}</span>
           <span class="nm">${esc(m.name)}</span>
-          <span style="margin-left:auto;font-size:12px;color:var(--ink-3)">${prayerCount(m.id, day)}/5</span>
+          <span style="margin-left:auto;font-size:12px;color:var(--ink-3)">${excused ? 'excused' : `${prayerCount(m.id, day)}/5`}</span>
         </div>
-        <div class="pills">
-          ${PRAYER_ORDER.map((k) => {
-            const r = getPrayer(m.id, day, k);
-            const st = r?.status || 'pending';
-            return `<span class="pill ${st}"><span class="dot"></span>${PMETA[k].name}</span>`;
-          }).join('')}
-        </div>
+        ${excused
+          ? '<div class="pills"><span class="pill pending">Excused today</span></div>'
+          : `<div class="pills">
+              ${PRAYER_ORDER.map((k) => {
+                const r = getPrayer(m.id, day, k);
+                const st = r?.status || 'pending';
+                return `<span class="pill ${st}"><span class="dot"></span>${PMETA[k].name}</span>`;
+              }).join('')}
+            </div>`}
         ${planFor(m.id, day).length ? `<div class="mini-list">${planFor(m.id, day).map((t) => `<div class="${t.done ? 'done' : ''}">${t.done ? '✓' : '·'} ${esc(t.title)}</div>`).join('')}</div>` : ''}
         ${rv ? `
           <div class="scores">
@@ -2913,8 +3027,29 @@ const ACTIONS = {
     setTimeout(() => toast(`${PMETA[key].name} · ${STATUS_LABEL[status].toLowerCase()}`), 140);
   },
 
-  'clear-status': async (el) => {
+  'toggle-mosque': async (el) => {
     const who = actor();
+    const key = el.dataset.key;
+    const day = dayKey();
+    const rec = getPrayer(who.id, day, key);
+    const on = !rec?.mosque;
+    await patchPrayer(who.id, day, key, { mosque: on, status: on && !rec ? 'ontime' : rec?.status || 'ontime' });
+    el.querySelector('.switch')?.setAttribute('aria-checked', String(on));
+    haptic(8);
+    S.justLogged = key;
+    refresh();
+    setTimeout(() => { S.justLogged = null; }, 900);
+  },
+
+  'toggle-cycle': async () => {
+    const who = actor();
+    const on = await toggleCycleDay(who.id, dayKey());
+    haptic(on ? 12 : 6);
+    refresh();
+    toast(on ? 'Excused today — prayers not counted' : 'Back to counting');
+  },
+
+  'clear-status': async (el) => {    const who = actor();
     const id = `${who.id}|${dayKey()}|${el.dataset.key}`;
     S.prayers = S.prayers.filter((p) => p.id !== id);
     await db.del('prayers', id);
@@ -2965,6 +3100,8 @@ const ACTIONS = {
   'goal-menu': (el) => sheetGoal(el.dataset.id),
 
   qibla: () => sheetQibla(),
+
+  nudge: () => sendNudge(),
 
   'prayer-notifs': () => sheetPrayerNotifs(),
 

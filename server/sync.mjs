@@ -30,7 +30,7 @@ const MIME = {
   '.txt': 'text/plain; charset=utf-8',
 };
 
-const EMPTY = { couples: {}, members: [], prayers: [], plan: [], reviews: [], reactions: [], goals: [], cycles: [], tombstones: [] };
+const EMPTY = { couples: {}, members: [], prayers: [], plan: [], reviews: [], reactions: [], goals: [], cycles: [], nudges: [], tombstones: [] };
 let state = load();
 
 function load() {
@@ -120,6 +120,7 @@ function pull(body) {
     reactions: changed('reactions'),
     goals: changed('goals'),
     cycles: changed('cycles'),
+    nudges: changed('nudges'),
     deletes: state.tombstones
       .filter((t) => t.couple_id === couple.id && new Date(t.deleted_at).getTime() > since)
       .map((t) => ({ kind: t.kind, id: t.row_id })),
@@ -140,6 +141,7 @@ function push(body) {
     ['reactions', ['id', 'from_member', 'target_type', 'target_id', 'emoji']],
     ['goals', ['id', 'member_id', 'scope', 'title', 'progress', 'created_at', 'completed_at']],
     ['cycles', ['id', 'member_id', 'day']],
+    ['nudges', ['id', 'from_member', 'to_member', 'created_at', 'seen_at']],
     ['members', ['id', 'name', 'color', 'avatar', 'tz']],
   ];
 

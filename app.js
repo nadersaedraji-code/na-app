@@ -11,13 +11,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '3.2.0';
+const APP_VERSION = '3.3.0';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '3.3.0', at: '16 Nov 2026', notes: "Custom messages, the day arc, and a kinder streak rule." },
   { v: '3.2.0', at: '16 Nov 2026', notes: "Period is a pink state on each prayer; the mosque is gold." },
   { v: '3.1.1', at: '16 Nov 2026', notes: "Theme switching is instant on iOS now." },
   { v: '3.1.0', at: '16 Nov 2026', notes: "The reminder bell lives on Home, and it travels through the app." },
@@ -997,17 +998,17 @@ function sheetRecap(index) {
   `);
 }
 
-/** Days where all five prayers were logged on time — or at the mosque. */
+/** A day counts when all five are kept: on time, at the mosque, or period. */
 function perfectDays(memberId) {
   const tally = new Map();
   for (const r of S.prayers) {
     if (r.memberId !== memberId) continue;
-    if (!prayerKept(r)) continue;
+    const counts = r.status === 'ontime' || r.status === 'period' || r.mosque === true;
+    if (!counts) continue;
     tally.set(r.day, (tally.get(r.day) || 0) + 1);
   }
-  const excused = excusedDays(memberId);
   const out = new Set();
-  for (const [day, n] of tally) if (n >= 5 && !excused.has(day)) out.add(day);
+  for (const [day, n] of tally) if (n >= 5) out.add(day);
   return out;
 }
 
@@ -1035,31 +1036,22 @@ const prayerCounted = (r) => !!r && (r.status === 'ontime' || r.status === 'late
  */
 function streakOf(memberId) {
   const perfect = perfectDays(memberId);
-  const excused = excusedDays(memberId);
   const start = statsStart();
   const today = dayKey();
 
   let cursor = parseDay(today);
-  if (!perfect.has(today) && !excused.has(today)) cursor = addDays(cursor, -1);
+  if (!perfect.has(today)) cursor = addDays(cursor, -1);
 
   let current = 0;
-  while (dayKey(cursor) >= start) {
-    const k = dayKey(cursor);
-    if (excused.has(k)) { cursor = addDays(cursor, -1); continue; }
-    if (perfect.has(k)) {
-      current++;
-      cursor = addDays(cursor, -1);
-    } else {
-      break;
-    }
+  while (dayKey(cursor) >= start && perfect.has(dayKey(cursor))) {
+    current++;
+    cursor = addDays(cursor, -1);
   }
 
   let best = 0;
   let run = 0;
   for (let d = parseDay(start); dayKey(d) <= today; d = addDays(d, 1)) {
-    const k = dayKey(d);
-    if (excused.has(k)) continue;
-    if (perfect.has(k)) {
+    if (perfect.has(dayKey(d))) {
       run++;
       if (run > best) best = run;
     } else {
@@ -1067,7 +1059,7 @@ function streakOf(memberId) {
     }
   }
 
-  return { current, best: Math.max(best, current), excusedToday: excused.has(today) };
+  return { current, best: Math.max(best, current), excusedToday: isExcused(memberId, today) };
 }
 
 const flameSvg = (size = 16) =>
@@ -1102,7 +1094,7 @@ function streakCard() {
         </div>
         <div class="streak-text">
           <div class="streak-k">day streak</div>
-          <div class="streak-d">${s.excusedToday ? 'Excused today — the streak is safe' : s.current ? 'Every prayer, on time' : 'Five on-time prayers starts it'}</div>
+          <div class="streak-d">${s.current ? 'Every prayer kept' : 'Fill all five to start it'}</div>
         </div>
         ${s.best > s.current ? `<div class="streak-best"><span>best</span><b class="num">${s.best}</b></div>` : ''}
       </div>
@@ -1339,6 +1331,62 @@ function attachCompass(sheet, bearing) {
 }
 
 /* ============================================================
+   The day arc — five prayers on the sky, the sun at "now"
+   ============================================================ */
+function dayArc(who) {
+  const day = dayKey();
+  const t = times(day);
+  const fajr = t.fajr.getTime();
+  const isha = t.isha.getTime();
+  const span = Math.max(60000, isha - fajr);
+  const now = Date.now();
+  const f = Math.min(1, Math.max(0, (now - fajr) / span));
+
+  const P = (frac) => {
+    const th = Math.PI * (1 - Math.min(1, Math.max(0, frac)));
+    return [150 + 138 * Math.cos(th), 82 - 68 * Math.sin(th)];
+  };
+
+  const [x0, y0] = P(0);
+  const [x1, y1] = P(1);
+  const [xc, yc] = P(f);
+
+  const dots = PRAYER_ORDER.map((k) => {
+    const frac = (t[k].getTime() - fajr) / span;
+    const [x, y] = P(frac);
+    const r = getPrayer(who.id, day, k);
+    const st = r?.mosque ? 'mosque' : r?.status || 'pending';
+    return `<circle class="arc-dot" data-state="${st}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4.3"></circle>`;
+  }).join('');
+
+  const np = nextPrayer(t);
+
+  return `
+    <section class="dayarc">
+      <div class="arc-head">
+        <div>
+          <div class="arc-k">${np.tomorrow ? 'Tomorrow' : 'Next'}</div>
+          <div class="arc-next">${PMETA[np.key].name} <b class="num">${fmtTime(np.at)}</b></div>
+        </div>
+        <div class="arc-in num">in <b>${fmtCountdown(np.at - new Date())}</b></div>
+      </div>
+
+      <svg class="arc-svg" viewBox="0 0 300 104" aria-hidden="true">
+        <path class="arc-track" d="M${x0.toFixed(1)} ${y0.toFixed(1)} A 138 68 0 0 1 ${x1.toFixed(1)} ${y1.toFixed(1)}"/>
+        ${f > 0.003 ? `<path class="arc-fill" d="M${x0.toFixed(1)} ${y0.toFixed(1)} A 138 68 0 0 1 ${xc.toFixed(1)} ${yc.toFixed(1)}"/>` : ''}
+        ${dots}
+        <circle class="arc-sun" cx="${xc.toFixed(1)}" cy="${yc.toFixed(1)}" r="5.4"></circle>
+      </svg>
+
+      <div class="arc-foot">
+        <span>Fajr <b class="num">${fmtTime(t.fajr)}</b></span>
+        <span class="arc-now-label">now</span>
+        <span>Isha <b class="num">${fmtTime(t.isha)}</b></span>
+      </div>
+    </section>`;
+}
+
+/* ============================================================
    View — Home
    ============================================================ */
 function viewHome() {
@@ -1411,14 +1459,7 @@ function viewHome() {
 
     ${streakCard()}
 
-    <div class="next">
-      <span class="dot"></span>
-      <div>
-        <div class="label">${np.tomorrow ? 'Tomorrow' : 'Next'}</div>
-        <div class="who">${PMETA[np.key].name} <span class="num">${fmtTime(np.at)}</span></div>
-      </div>
-      <div class="in num">in <b>${fmtCountdown(np.at - new Date())}</b></div>
-    </div>
+    ${dayArc(who)}
 
     <div class="tiles">
       <button class="tile" data-act="tab" data-view="plan">
@@ -2412,7 +2453,7 @@ async function applyRemoteChange() {
 }
 
 /** A nudge arrives as the app speaking — never as the partner's name. */
-async function sendNudge() {
+async function sendNudge(message = '') {
   const who = me();
   const partner = other(who);
   if (!partner) return toast('No partner yet');
@@ -2423,7 +2464,7 @@ async function sendNudge() {
     from: who.id,
     targetType: 'ping',
     targetId: partner.id,
-    emoji: '🔔',
+    emoji: String(message || '').slice(0, 140),
     day: dayKey(),
     createdAt: Date.now(),
   };
@@ -2431,6 +2472,23 @@ async function sendNudge() {
   await db.put('reactions', rec);
   haptic(14);
   toast('Sent — quietly');
+}
+
+function sheetPing() {
+  const partner = other(me());
+  openSheet(`
+    <div class="grip"></div>
+    <h3>Send a notification</h3>
+    <p class="sheet-sub">It arrives as the app speaking — your name stays out of it.</p>
+    <form data-form="send-ping">
+      <textarea class="area" name="message" maxlength="140" placeholder="Write something…" style="min-height:86px"></textarea>
+      <div class="ping-phrases">
+        ${['Thinking of you', 'Pray for me', 'You’ve got this', 'Call me when you’re free']
+          .map((p) => `<button type="button" class="chip" data-act="ping-phrase" data-text="${esc(p)}">${esc(p)}</button>`).join('')}
+      </div>
+      <button class="btn primary wide" type="submit" style="margin-top:14px">Send</button>
+    </form>
+  `, (sheet) => sheet.querySelector('textarea')?.focus());
 }
 
 const lastPingSeen = () => {
@@ -2454,8 +2512,9 @@ async function deliverPings() {
   if (!pings.length) return;
 
   const latest = Math.max(...pings.map((p) => p.createdAt || 0));
+  const withText = pings.filter((p) => p.emoji && p.emoji.trim()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))[0];
   try { localStorage.setItem('na:pingSeen', String(latest)); } catch { /* ignore */ }
-  await notify('A quiet reminder', 'The app has a moment for you.', `ping-${latest}`);
+  await notify('A quiet reminder', withText?.emoji?.slice(0, 140) || 'The app has a moment for you.', `ping-${latest}`);
 }
 
 async function deliverNudges() { await deliverPings(); }
@@ -3147,8 +3206,14 @@ const ACTIONS = {
 
   qibla: () => sheetQibla(),
 
-  nudge: () => sendNudge(),
-  'send-ping': () => sendNudge(),
+  nudge: () => sheetPing(),
+  'send-ping': () => sheetPing(),
+
+  'ping-phrase': (el) => {
+    const sheet = document.querySelector('.sheet');
+    const area = sheet?.querySelector('textarea[name="message"]');
+    if (area) { area.value = el.dataset.text; area.focus(); }
+  },
 
   'prayer-notifs': () => sheetPrayerNotifs(),
 
@@ -3754,6 +3819,13 @@ document.addEventListener('submit', async (e) => {
     await saveGoal(g);
     closeSheet();
     refresh();
+    return;
+  }
+
+  if (kind === 'send-ping') {
+    const message = String(data.message || '').trim();
+    closeSheet();
+    await sendNudge(message);
     return;
   }
 

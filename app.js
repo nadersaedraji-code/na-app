@@ -11,13 +11,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '2.6.1';
+const APP_VERSION = '2.6.2';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '2.6.2', at: '16 Nov 2026', notes: "One tap to start counting tomorrow." },
   { v: '2.6.1', at: '16 Nov 2026', notes: "Goals travel too — and the sync queue now clears after every push." },
   { v: '2.6.0', at: '16 Nov 2026', notes: "Cloud sync is connected — two phones, one life." },
   { v: '2.5.1', at: '16 Nov 2026', notes: "One scroll container for the avatar picker, and a confirmation when it saves." },
@@ -2574,13 +2575,20 @@ function sheetLocation() {
 }
 
 function sheetStartDate() {
+  const tomorrow = dayKey(addDays(new Date(), 1));
   openSheet(`
     <div class="grip"></div>
     <h3>Counting from</h3>
     <p class="sheet-sub">Days before this date are left out of your averages and the graph. Change it any time.</p>
-    <form data-form="save-start">
+    <button class="sheet-opt" data-act="start-tomorrow" data-day="${tomorrow}" data-active="${statsStart() === tomorrow}">
+      <span class="sw" style="background:var(--ok)"></span>
+      <span class="lbl">Start tomorrow<span class="sub">${parseDay(tomorrow).toLocaleDateString(LOCALE, { weekday: 'long', day: 'numeric', month: 'long' })}</span></span>
+      ${statsStart() === tomorrow ? '✓' : ''}
+    </button>
+    <form data-form="save-start" style="margin-top:14px">
+      <div class="label">Or pick a date</div>
       <input class="line" type="date" name="start" value="${statsStart()}">
-      <button class="btn primary wide" type="submit" style="margin-top:12px">Save</button>
+      <button class="btn primary wide" type="submit" style="margin-top:10px">Save</button>
     </form>
   `);
 }
@@ -3158,6 +3166,15 @@ const ACTIONS = {
   },
   location: () => sheetLocation(),
   'start-date': () => sheetStartDate(),
+
+  'start-tomorrow': async (el) => {
+    const day = el.dataset.day;
+    S.settings.startDate = day;
+    await db.put('meta', { key: 'settings', value: S.settings });
+    closeSheet();
+    refresh();
+    toast(`Counting from ${parseDay(day).toLocaleDateString(LOCALE, { day: 'numeric', month: 'long' })}`);
+  },
   'times-today': () => sheetTimes(),
 
   theme: async (el) => {

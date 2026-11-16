@@ -11,13 +11,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '3.1.0';
+const APP_VERSION = '3.1.1';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '3.1.1', at: '16 Nov 2026', notes: "Theme switching is instant on iOS now." },
   { v: '3.1.0', at: '16 Nov 2026', notes: "The reminder bell lives on Home, and it travels through the app." },
   { v: '3.0.1', at: '16 Nov 2026', notes: "The period option is now inside the prayer sheet too." },
   { v: '3.0.0', at: '16 Nov 2026', notes: "Paper grain, deeper light, and the mosque, cycle and nudge options." },
@@ -3428,7 +3429,9 @@ const ACTIONS = {
     S.settings.theme = el.dataset.theme;
     await db.put('meta', { key: 'settings', value: S.settings });
     applyTheme();
-    refresh();
+    document.querySelectorAll('[data-act="theme"]').forEach((b) => {
+      b.setAttribute('aria-selected', String(b.dataset.theme === S.settings.theme));
+    });
   },
 
   toggle: async (el) => {

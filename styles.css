@@ -103,15 +103,14 @@ body{
   text-rendering:optimizeLegibility;
   overscroll-behavior-y:none;
   touch-action:manipulation;
-  transition:background-color .35s var(--ease), color .35s var(--ease);
 }
 /* a whisper of paper grain — it keeps large blush areas from looking flat */
 body::after{
   content:"";position:fixed;inset:0;z-index:5;pointer-events:none;
-  opacity:.035;mix-blend-mode:multiply;
+  opacity:.03;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.6'/%3E%3C/svg%3E");
 }
-[data-theme="dark"] body::after{mix-blend-mode:screen;opacity:.045;}
+[data-theme="dark"] body::after{opacity:.045;}
 h1,h2,h3,h4,p{margin:0;}
 button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;}
 input,textarea,select{font:inherit;color:inherit;}
@@ -122,7 +121,7 @@ input,textarea,select{font:inherit;color:inherit;}
 /* ambient light -------------------------------------------------- */
 .ambient{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;}
 .ambient::before,.ambient::after{
-  content:"";position:absolute;border-radius:50%;filter:blur(90px);
+  content:"";position:absolute;border-radius:50%;
   transition:background .8s var(--ease);
 }
 .ambient::before{width:78vw;height:78vw;max-width:540px;max-height:540px;top:-26vw;left:-20vw;background:radial-gradient(circle at 35% 35%, rgba(242,147,180,.30), transparent 68%);}
@@ -748,7 +747,7 @@ input[type="range"]::-moz-range-thumb{width:24px;height:24px;border:0;border-rad
   pointer-events:auto;max-width:480px;margin:0 auto;display:flex;gap:1px;
   padding:7px 8px;border-radius:22px;
   background:color-mix(in srgb, var(--bg-soft) 78%, transparent);
-  -webkit-backdrop-filter:blur(26px) saturate(1.5);backdrop-filter:blur(26px) saturate(1.5);
+  -webkit-backdrop-filter:blur(18px) saturate(1.4);backdrop-filter:blur(18px) saturate(1.4);
   box-shadow:0 20px 44px -22px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.06);
 }
 [data-theme="light"] .tabs-inner{box-shadow:0 18px 40px -24px rgba(40,32,24,.35), inset 0 1px 0 #fff;}

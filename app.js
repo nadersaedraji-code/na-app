@@ -11,13 +11,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '3.1.1';
+const APP_VERSION = '3.2.0';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '3.2.0', at: '16 Nov 2026', notes: "Period is a pink state on each prayer; the mosque is gold." },
   { v: '3.1.1', at: '16 Nov 2026', notes: "Theme switching is instant on iOS now." },
   { v: '3.1.0', at: '16 Nov 2026', notes: "The reminder bell lives on Home, and it travels through the app." },
   { v: '3.0.1', at: '16 Nov 2026', notes: "The period option is now inside the prayer sheet too." },
@@ -73,6 +74,7 @@ const STATUS_LABEL = {
   ontime: 'On time',
   late: 'Late',
   missed: 'Missed',
+  period: 'Period',
   pending: 'Not logged',
 };
 
@@ -316,8 +318,7 @@ const isDue = (day, key) => {
 function prayerCount(memberId, day) {
   let on = 0;
   for (const k of PRAYER_ORDER) {
-    const r = getPrayer(memberId, day, k);
-    if (r && r.status !== 'missed') on++;
+    if (prayerCounted(getPrayer(memberId, day, k))) on++;
   }
   return on;
 }
@@ -1001,7 +1002,7 @@ function perfectDays(memberId) {
   const tally = new Map();
   for (const r of S.prayers) {
     if (r.memberId !== memberId) continue;
-    if (r.status !== 'ontime' && r.mosque !== true) continue;
+    if (!prayerKept(r)) continue;
     tally.set(r.day, (tally.get(r.day) || 0) + 1);
   }
   const excused = excusedDays(memberId);
@@ -1010,12 +1011,22 @@ function perfectDays(memberId) {
   return out;
 }
 
+/** A day is excused when all five prayers are marked as period. */
 const isExcused = (memberId, day) =>
-  S.cycles.some((c) => c.memberId === memberId && c.day === day);
+  PRAYER_ORDER.every((k) => getPrayer(memberId, day, k)?.status === 'period');
 
 function excusedDays(memberId) {
-  return new Set(S.cycles.filter((c) => c.memberId === memberId).map((c) => c.day));
+  const days = new Set();
+  for (const p of S.prayers) {
+    if (p.memberId === memberId && p.status === 'period') days.add(p.day);
+  }
+  const out = new Set();
+  for (const d of days) if (isExcused(memberId, d)) out.add(d);
+  return out;
 }
+
+const prayerKept = (r) => !!r && (r.status === 'ontime' || r.mosque === true);
+const prayerCounted = (r) => !!r && (r.status === 'ontime' || r.status === 'late');
 
 /**
  * A day joins the streak only when all five prayers were on time.
@@ -1614,10 +1625,10 @@ function viewPrayer() {
     const rec = getPrayer(who.id, today, k);
     const state = rec?.status || 'pending';
     const fresh = S.justLogged === k && state !== 'pending' ? ' data-fresh="1"' : '';
-    const flood = state === 'ontime' ? 'var(--ok)' : state === 'late' ? 'var(--late)' : state === 'missed' ? 'var(--miss)' : 'transparent';
+    const flood = state === 'ontime' ? 'var(--ok)' : state === 'late' ? 'var(--late)' : state === 'missed' ? 'var(--miss)' : state === 'period' ? 'var(--pink)' : 'transparent';
     return `
       <button class="prow" data-act="log" data-key="${k}" data-state="${state}"${fresh} style="--flood:${flood}">
-        <span class="glyph">${state === 'ontime' ? '✓' : state === 'late' ? '◔' : state === 'missed' ? '✕' : '○'}</span>
+        <span class="glyph">${state === 'ontime' ? '✓' : state === 'late' ? '◔' : state === 'missed' ? '✕' : state === 'period' ? '—' : '○'}</span>
         <span class="meta">
           <span class="name">${PMETA[k].name}<span class="ar">${PMETA[k].ar}</span></span>
           <span class="window num">${rec?.mosque ? `<span class="mosque-ico">${I.mosque}</span>` : ''}${fmtTime(t[k])} – ${fmtTime(t.onTimeEnd[k])}</span>
@@ -1640,7 +1651,7 @@ function viewPrayer() {
           const r = getPrayer(p.id, today, k);
           const st = r?.status || 'pending';
           const react = r ? reactionFor(who.id, 'prayer', r.id) : null;
-          return `<button class="mini" data-state="${st}" data-act="react-prayer" data-id="${r?.id || ''}" data-key="${k}"
+          return `<button class="mini" data-state="${st}" data-mosque="${r?.mosque ? '1' : '0'}" data-act="react-prayer" data-id="${r?.id || ''}" data-key="${k}"
             aria-label="${p.name} · ${PMETA[k].name} · ${STATUS_LABEL[st]}">
             ${PMETA[k].abbr}${react ? `<span class="react">${react.emoji}</span>` : ''}
           </button>`;
@@ -1679,13 +1690,6 @@ function viewPrayer() {
     </div>
 
     <div class="prayers stagger">${rows}</div>
-
-    ${excused ? '<div class="excused-bar"><span class="dot"></span>Excused today — prayers are not counted</div>' : ''}
-
-    <button class="cycle-toggle ${excused ? 'on' : ''}" data-act="toggle-cycle">
-      <span class="cy-dot"></span>
-      <span>${excused ? 'Excused today · tap to undo' : 'On my period · prayers excused'}</span>
-    </button>
 
     ${qiblaStrip()}
 
@@ -2182,7 +2186,7 @@ function monthStats(base) {
           if (!isDue(day, k)) continue;
           const r = getPrayer(mem.id, day, k);
           pTot++;
-          if (r && r.status !== 'missed') pOk++;
+          if (prayerCounted(r)) pOk++;
         }
       }
       for (const t of planFor(mem.id, day)) { tTot++; if (isDone(t)) tDone++; }
@@ -2562,6 +2566,7 @@ function sheetStatus(key) {
     ['ontime', 'On time', 'Inside the window', 'var(--ok)'],
     ['late', 'Late', 'Prayed, after the window', 'var(--late)'],
     ['missed', 'Missed', 'Not prayed in the window', 'var(--miss)'],
+    ['period', 'Period', 'Excused — not counted', 'var(--pink)'],
   ];
 
   openSheet(`
@@ -2576,14 +2581,9 @@ function sheetStatus(key) {
           ${rec?.status === val ? '<span style="color:var(--ink-2)">✓</span>' : ''}
         </button>`).join('')}
       <button class="sheet-opt" data-act="toggle-mosque" data-key="${key}">
-        <span class="sw" style="background:var(--ok)"></span>
+        <span class="sw" style="background:var(--gold)"></span>
         <span class="lbl">Prayed at the mosque<span class="sub">Counts for the streak even if late</span></span>
         <span class="switch" role="switch" aria-checked="${!!rec?.mosque}"></span>
-      </button>
-      <button class="sheet-opt" data-act="toggle-cycle-sheet">
-        <span class="sw" style="background:var(--pink)"></span>
-        <span class="lbl">Period — excused today<span class="sub">Skips all five prayers; keeps the streak</span></span>
-        <span class="switch" role="switch" aria-checked="${isExcused(who.id, day)}"></span>
       </button>
       <button class="sheet-opt cancel" data-act="close">Cancel</button>
     </div>

@@ -11,13 +11,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '3.3.0';
+const APP_VERSION = '3.4.0';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '3.4.0', at: '16 Nov 2026', notes: "The room follows the sky; the tab bar glides." },
   { v: '3.3.0', at: '16 Nov 2026', notes: "Custom messages, the day arc, and a kinder streak rule." },
   { v: '3.2.0', at: '16 Nov 2026', notes: "Period is a pink state on each prayer; the mosque is gold." },
   { v: '3.1.1', at: '16 Nov 2026', notes: "Theme switching is instant on iOS now." },
@@ -234,6 +235,8 @@ const S = {
   goalTab: 'mine',
   calMonth: null,
   scroll: {},
+  dir: 0,
+  animateNext: true,
   justLogged: null,
   syncState: 'off',
   suppressAnim: false,
@@ -432,6 +435,13 @@ async function boot() {
     setTimeout(() => toast(`Updated to v${updated}`), 700);
   }
   S.ready = true;
+
+  // The room changes light with the actual sky, even when the app stays open.
+  applySky();
+  setInterval(applySky, 4 * 60 * 1000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') applySky();
+  });
 }
 
 /* One-time: devices onboarded before 1.4.0 saved "dark". Move them to the
@@ -472,6 +482,36 @@ function applyTheme() {
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute('content', dark ? '#151017' : '#F7EFF1');
+  applySky();
+}
+
+/* The app's light follows the actual sky: night, dawn, day, dusk. */
+const SKY = {
+  night: ['rgba(158,152,220,.20)', 'rgba(202,156,205,.16)'],
+  dawn: ['rgba(255,186,150,.34)', 'rgba(255,214,170,.26)'],
+  day: ['rgba(176,203,255,.30)', 'rgba(255,226,220,.24)'],
+  afternoon: ['rgba(255,204,150,.30)', 'rgba(255,172,158,.22)'],
+  dusk: ['rgba(255,150,165,.34)', 'rgba(178,148,222,.26)'],
+};
+
+function skyPhase() {
+  const t = times(dayKey());
+  const now = new Date();
+  if (now < t.fajr) return 'night';
+  if (now < t.sunrise) return 'dawn';
+  if (now < t.asr) return 'day';
+  if (now < t.maghrib) return 'afternoon';
+  if (now < t.isha) return 'dusk';
+  return 'night';
+}
+
+function applySky() {
+  const phase = skyPhase();
+  const [a, b] = SKY[phase] || SKY.day;
+  const root = document.documentElement;
+  root.style.setProperty('--sky-a', a);
+  root.style.setProperty('--sky-b', b);
+  root.dataset.sky = phase;
 }
 
 function showApp() {
@@ -759,13 +799,44 @@ const TABS = [  { id: 'home', label: 'Home', icon: '<path d="M4 10.5 12 4l8 6.5V
 
 function renderTabs() {
   const nav = $('#tabs');
-  nav.innerHTML = `<div class="tabs-inner">${TABS.map(
-    (t) => `<button class="tab" data-act="tab" data-view="${t.id}" ${S.view === t.id ? 'aria-current="page"' : ''}>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">${t.icon}</svg>
-      <span>${t.label}</span>
-    </button>`
-  ).join('')}</div>`;
+  let inner = nav.querySelector('.tabs-inner');
+
+  if (!inner) {
+    nav.innerHTML = `<div class="tabs-inner">
+      <span class="tab-pill" aria-hidden="true"></span>
+      ${TABS.map(
+      (t) => `<button class="tab" data-act="tab" data-view="${t.id}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">${t.icon}</svg>
+        <span>${t.label}</span>
+      </button>`
+    ).join('')}</div>`;
+    inner = nav.querySelector('.tabs-inner');
+    requestAnimationFrame(() => {
+      positionTabPill();
+      inner.classList.add('ready');
+    });
+    document.fonts?.ready.then(positionTabPill).catch(() => {});
+  }
+
+  for (const tab of nav.querySelectorAll('.tab')) {
+    if (tab.dataset.view === S.view) tab.setAttribute('aria-current', 'page');
+    else tab.removeAttribute('aria-current');
+  }
+  requestAnimationFrame(positionTabPill);
 }
+
+function positionTabPill() {
+  const inner = document.querySelector('.tabs-inner');
+  const active = inner?.querySelector('.tab[aria-current="page"]');
+  const pill = inner?.querySelector('.tab-pill');
+  if (!inner || !active || !pill) return;
+  const r = active.getBoundingClientRect();
+  const b = inner.getBoundingClientRect();
+  pill.style.width = `${r.width}px`;
+  pill.style.transform = `translateX(${r.left - b.left}px)`;
+}
+
+window.addEventListener('resize', positionTabPill);
 
 function render() {
   if (!S.members.length) return;
@@ -774,8 +845,10 @@ function render() {
     ? `<div style="display:flex;justify-content:center;padding:6px 0 2px"><button class="preview-bar" data-act="exit-preview">Previewing as ${esc(actor()?.name)} · tap to exit</button></div>`
     : '';
   scr.style.setProperty('--accent', actor()?.color || '#8AA7FF');
+  scr.style.setProperty('--dir', String(S.dir || 0));
   document.documentElement.style.setProperty('--accent', actor()?.color || '#8AA7FF');
-  scr.innerHTML = banner + `<div class="view${S.suppressAnim ? ' no-anim' : ''}">${VIEWS[S.view]()}</div>`;
+  scr.innerHTML = banner + `<div class="view${S.animateNext ? '' : ' calm'}${S.suppressAnim ? ' no-anim' : ''}">${VIEWS[S.view]()}</div>`;
+  S.animateNext = false;
   renderTabs();
 }
 
@@ -786,10 +859,19 @@ function refresh() {
 }
 
 function go(view) {
+  if (view === S.view) {
+    const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.scrollTo({ top: 0, behavior: smooth ? 'smooth' : 'auto' });
+    return;
+  }
+  const from = TABS.findIndex((t) => t.id === S.view);
+  const to = TABS.findIndex((t) => t.id === view);
   S.scroll[S.view] = window.scrollY;
   S.view = view;
+  S.dir = from >= 0 && to >= 0 ? Math.sign(to - from) : 0;
+  S.animateNext = true;
   render();
-  requestAnimationFrame(() => window.scrollTo(0, S.scroll[view] || 0));
+  window.scrollTo(0, S.scroll[view] || 0);
 }
 
 /* ============================================================
@@ -1360,6 +1442,7 @@ function dayArc(who) {
   }).join('');
 
   const np = nextPrayer(t);
+  const night = now >= isha || now < fajr;
 
   return `
     <section class="dayarc">
@@ -1372,10 +1455,18 @@ function dayArc(who) {
       </div>
 
       <svg class="arc-svg" viewBox="0 0 300 104" aria-hidden="true">
-        <path class="arc-track" d="M${x0.toFixed(1)} ${y0.toFixed(1)} A 138 68 0 0 1 ${x1.toFixed(1)} ${y1.toFixed(1)}"/>
-        ${f > 0.003 ? `<path class="arc-fill" d="M${x0.toFixed(1)} ${y0.toFixed(1)} A 138 68 0 0 1 ${xc.toFixed(1)} ${yc.toFixed(1)}"/>` : ''}
+        ${night ? `<defs><mask id="naMoonMask">
+          <rect width="300" height="104" fill="#000"/>
+          <circle cx="${xc.toFixed(1)}" cy="${yc.toFixed(1)}" r="5.9" fill="#fff"/>
+          <circle cx="${(xc + 2.7).toFixed(1)}" cy="${(yc - 1.2).toFixed(1)}" r="5.1" fill="#000"/>
+        </mask></defs>` : ''}
+        <path class="arc-track" pathLength="1" d="M${x0.toFixed(1)} ${y0.toFixed(1)} A 138 68 0 0 1 ${x1.toFixed(1)} ${y1.toFixed(1)}"/>
+        ${f > 0.003 ? `<path class="arc-fill" pathLength="1" d="M${x0.toFixed(1)} ${y0.toFixed(1)} A 138 68 0 0 1 ${xc.toFixed(1)} ${yc.toFixed(1)}"/>` : ''}
         ${dots}
-        <circle class="arc-sun" cx="${xc.toFixed(1)}" cy="${yc.toFixed(1)}" r="5.4"></circle>
+        <circle class="arc-halo${night ? ' night' : ''}" cx="${xc.toFixed(1)}" cy="${yc.toFixed(1)}" r="11"></circle>
+        ${night
+          ? `<circle class="arc-moon" cx="${xc.toFixed(1)}" cy="${yc.toFixed(1)}" r="5.9" mask="url(#naMoonMask)"></circle>`
+          : `<circle class="arc-sun" cx="${xc.toFixed(1)}" cy="${yc.toFixed(1)}" r="5.4"></circle>`}
       </svg>
 
       <div class="arc-foot">

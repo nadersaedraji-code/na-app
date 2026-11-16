@@ -11,13 +11,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '3.0.0';
+const APP_VERSION = '3.0.1';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '3.0.1', at: '16 Nov 2026', notes: "The period option is now inside the prayer sheet too." },
   { v: '3.0.0', at: '16 Nov 2026', notes: "Paper grain, deeper light, and the mosque, cycle and nudge options." },
   { v: '2.7.0', at: '16 Nov 2026', notes: "Reminders that say when they're blocked, and notifications worth tapping." },
   { v: '2.6.2', at: '16 Nov 2026', notes: "One tap to start counting tomorrow." },
@@ -2548,6 +2549,11 @@ function sheetStatus(key) {
         <span class="lbl">Prayed at the mosque<span class="sub">Counts for the streak even if late</span></span>
         <span class="switch" role="switch" aria-checked="${!!rec?.mosque}"></span>
       </button>
+      <button class="sheet-opt" data-act="toggle-cycle-sheet">
+        <span class="sw" style="background:var(--pink)"></span>
+        <span class="lbl">Period — excused today<span class="sub">Skips all five prayers; keeps the streak</span></span>
+        <span class="switch" role="switch" aria-checked="${isExcused(who.id, day)}"></span>
+      </button>
       <button class="sheet-opt cancel" data-act="close">Cancel</button>
     </div>
   `);
@@ -3045,6 +3051,15 @@ const ACTIONS = {
     const who = actor();
     const on = await toggleCycleDay(who.id, dayKey());
     haptic(on ? 12 : 6);
+    refresh();
+    toast(on ? 'Excused today — prayers not counted' : 'Back to counting');
+  },
+
+  'toggle-cycle-sheet': async () => {
+    const who = actor();
+    const on = await toggleCycleDay(who.id, dayKey());
+    haptic(on ? 12 : 6);
+    closeSheet();
     refresh();
     toast(on ? 'Excused today — prayers not counted' : 'Back to counting');
   },

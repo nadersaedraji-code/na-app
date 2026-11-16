@@ -30,7 +30,7 @@ const MIME = {
   '.txt': 'text/plain; charset=utf-8',
 };
 
-const EMPTY = { couples: {}, members: [], prayers: [], plan: [], reviews: [], reactions: [], goals: [], tombstones: [] };
+const EMPTY = { couples: {}, members: [], prayers: [], plan: [], reviews: [], reactions: [], goals: [], cycles: [], tombstones: [] };
 let state = load();
 
 function load() {
@@ -119,6 +119,7 @@ function pull(body) {
     reviews: changed('reviews'),
     reactions: changed('reactions'),
     goals: changed('goals'),
+    cycles: changed('cycles'),
     deletes: state.tombstones
       .filter((t) => t.couple_id === couple.id && new Date(t.deleted_at).getTime() > since)
       .map((t) => ({ kind: t.kind, id: t.row_id })),
@@ -133,11 +134,12 @@ function push(body) {
   const data = body.p_data || {};
 
   const tables = [
-    ['prayers', ['id', 'member_id', 'day', 'prayer', 'status', 'logged_at']],
+    ['prayers', ['id', 'member_id', 'day', 'prayer', 'status', 'logged_at', 'mosque']],
     ['plan', ['id', 'member_id', 'day', 'title', 'time_label', 'priority', 'done', 'done_at', 'position', 'created_at', 'progress']],
     ['reviews', ['id', 'member_id', 'day', 'wins', 'productivity', 'happiness', 'highlight', 'notes']],
     ['reactions', ['id', 'from_member', 'target_type', 'target_id', 'emoji']],
     ['goals', ['id', 'member_id', 'scope', 'title', 'progress', 'created_at', 'completed_at']],
+    ['cycles', ['id', 'member_id', 'day']],
     ['members', ['id', 'name', 'color', 'avatar', 'tz']],
   ];
 

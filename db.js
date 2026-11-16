@@ -6,7 +6,7 @@
    ============================================================ */
 
 const DB_NAME = 'na-app';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 export const SCHEMA_VERSION = 1;
 
@@ -18,6 +18,7 @@ const STORES = [
   ['reviews', { keyPath: 'id', indexes: [['day', 'day'], ['memberId', 'memberId']] }],
   ['reactions', { keyPath: 'id' }],
   ['goals', { keyPath: 'id', indexes: [['memberId', 'memberId']] }],
+  ['cycles', { keyPath: 'id', indexes: [['day', 'day'], ['memberId', 'memberId']] }],
   ['snapshots', { keyPath: 'key' }],
 ];
 
@@ -144,6 +145,7 @@ export async function loadAll() {
     reviews: bag.reviews,
     reactions: bag.reactions,
     goals: bag.goals,
+    cycles: bag.cycles,
   };
 }
 
@@ -219,7 +221,7 @@ export async function saveMeta(key, value) {
 }
 
 export async function wipeUserData() {
-  for (const name of ['members', 'prayers', 'plan', 'reviews', 'reactions', 'goals']) {
+  for (const name of ['members', 'prayers', 'plan', 'reviews', 'reactions', 'goals', 'cycles']) {
     await clear(name);
   }
   for (const key of ['app', 'seeded', 'settings', 'sync']) {

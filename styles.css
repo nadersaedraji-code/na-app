@@ -280,8 +280,16 @@ input,textarea,select{font:inherit;color:inherit;}
 .streak-card.cold .streak-n{color:var(--ink-3);}
 .hero-streak{display:inline-flex;align-items:center;gap:6px;margin-top:11px;font-size:12px;font-weight:600;color:var(--pink);}
 
-/* qibla --------------------------------------------------------------- */
-.qibla-strip{display:flex;align-items:center;gap:13px;width:100%;margin-top:14px;padding:14px 16px;border-radius:var(--r-md);background:var(--card-flat);box-shadow:inset 0 0 0 1px var(--line);text-align:left;transition:transform .15s var(--ease);}
+/* notification status --------------------------------------------------- */
+.notif-state{display:flex;align-items:center;gap:11px;padding:13px 15px;border-radius:15px;background:var(--day-bg);margin-bottom:14px;}
+.notif-state .dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--ink-3);}
+.notif-state.granted .dot{background:var(--ok);box-shadow:0 0 0 4px color-mix(in srgb, var(--ok) 16%, transparent);}
+.notif-state.denied .dot{background:var(--miss);}
+.notif-state.default .dot{background:var(--late);}
+.notif-state .txt{font-size:13.5px;font-weight:600;}
+.notif-state .sub{display:block;font-size:11.5px;color:var(--ink-3);font-weight:400;margin-top:2px;}
+
+/* qibla --------------------------------------------------------------- */.qibla-strip{display:flex;align-items:center;gap:13px;width:100%;margin-top:14px;padding:14px 16px;border-radius:var(--r-md);background:var(--card-flat);box-shadow:inset 0 0 0 1px var(--line);text-align:left;transition:transform .15s var(--ease);}
 .qibla-strip:active{transform:scale(.985);}
 .qs-ico{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:color-mix(in srgb, var(--pink) 12%, transparent);color:var(--pink);flex:none;}
 .qs-body{flex:1;min-width:0;}

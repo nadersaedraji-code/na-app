@@ -5,7 +5,7 @@
    User data lives in IndexedDB and is never touched here.
    ============================================================ */
 
-const VERSION = '2.6.2';
+const VERSION = '2.7.0';
 const CACHE = `na-shell-${VERSION}`;
 
 const ASSETS = [
@@ -54,6 +54,24 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('message', (event) => {
   if (event.data === 'SKIP_WAITING') self.skipWaiting();
+});
+
+/* Tapping a notification — or its action button — opens the app on that prayer. */
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const prayer = event.notification.data && event.notification.data.prayer;
+  const target = new URL(prayer ? `./?log=${prayer}` : './', self.registration.scope).href;
+
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const existing = windows.find((c) => c.url.startsWith(self.registration.scope));
+    if (existing) {
+      await existing.focus();
+      if (prayer) existing.postMessage({ type: 'NA_LOG', prayer });
+      return;
+    }
+    await self.clients.openWindow(target);
+  })());
 });
 
 self.addEventListener('fetch', (event) => {

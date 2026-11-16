@@ -11,13 +11,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '2.6.2';
+const APP_VERSION = '2.7.0';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '2.7.0', at: '16 Nov 2026', notes: "Reminders that say when they're blocked, and notifications worth tapping." },
   { v: '2.6.2', at: '16 Nov 2026', notes: "One tap to start counting tomorrow." },
   { v: '2.6.1', at: '16 Nov 2026', notes: "Goals travel too — and the sync queue now clears after every push." },
   { v: '2.6.0', at: '16 Nov 2026', notes: "Cloud sync is connected — two phones, one life." },
@@ -378,6 +379,11 @@ async function boot() {
   } else {
     showApp();
     startPrayerWatch();
+    const logParam = new URLSearchParams(location.search).get('log');
+    if (logParam) {
+      history.replaceState(null, '', location.pathname + location.hash);
+      setTimeout(() => { go('prayer'); setTimeout(() => sheetStatus(logParam), 350); }, 400);
+    }
     if (sync.isOn()) {
       sync.startPolling();
       sync.pull();
@@ -1378,27 +1384,56 @@ function once(key, fn) {
   fn();
 }
 
-async function notify(title, body, tag) {
+async function notify(title, body, tag, extra = {}) {
+  const url = new URL('./', location.href).href;
   const opts = {
     body,
     tag,
+    renotify: true,
     icon: './icons/icon-192.png',
     badge: './icons/icon-192.png',
-    vibrate: [90, 50, 90],
+    image: './icons/notify-hero.png',
+    vibrate: extra.urgent ? [120, 60, 120, 60, 200] : [60, 40, 60],
+    requireInteraction: !!extra.urgent,
+    data: { url, prayer: extra.prayer || null },
+    actions: extra.urgent && extra.prayer ? [{ action: 'log', title: `Log ${PMETA[extra.prayer].name}` }] : [],
   };
+
   if (!('Notification' in window) || Notification.permission !== 'granted') {
-    toast(`${title} — ${body}`, 5000);
-    return;
+    toast(`${title} — ${body}`, 5200);
+    return 'blocked';
   }
+
+  const mark = (result) => {
+    try { localStorage.setItem('na:lastNotif', JSON.stringify({ title, at: Date.now(), result })); } catch { /* ignore */ }
+  };
+
   try {
-    const reg = await navigator.serviceWorker?.getRegistration();
+    const reg = navigator.serviceWorker
+      ? await Promise.race([
+          navigator.serviceWorker.ready,
+          new Promise((_, reject) => setTimeout(() => reject(new Error('sw timeout')), 4000)),
+        ])
+      : null;
+
     if (reg?.showNotification) {
       await reg.showNotification(title, opts);
-      return;
+      mark('sent');
+      return 'sent';
     }
     new Notification(title, opts);
+    mark('sent');
+    return 'sent';
   } catch {
-    toast(`${title} — ${body}`, 5000);
+    try {
+      new Notification(title, opts);
+      mark('sent');
+      return 'sent';
+    } catch {
+      mark('failed');
+      toast(`${title} — ${body}`, 5200);
+      return 'failed';
+    }
   }
 }
 
@@ -1429,10 +1464,10 @@ function checkPrayerNotifications() {
 
     if (n.urgency !== false && now >= urgentAt) {
       once(`${day}|${k}|urgent`, () =>
-        notify(`${PMETA[k].name} ends in ${mins} min`, 'Still unlogged — pray before the window closes.', `urgent-${k}`));
+        notify(`${PMETA[k].name} ends in ${mins} min`, 'Still unlogged — pray before the window closes.', `urgent-${k}`, { urgent: true, prayer: k }));
     } else {
       once(`${day}|${k}|start`, () =>
-        notify(`${PMETA[k].name} · ${fmtTime(start)}`, `The window closes at ${fmtTime(end)}.`, `start-${k}`));
+        notify(`${PMETA[k].name} · ${fmtTime(start)}`, `The window closes at ${fmtTime(end)}.`, `start-${k}`, { prayer: k }));
     }
   }
 }
@@ -1444,7 +1479,7 @@ function startPrayerWatch() {
     try { checkPrayerNotifications(); } catch (err) { console.warn('reminder check failed', err); }
   };
   run();
-  notifTimer = setInterval(run, 45000);
+  notifTimer = setInterval(run, 30000);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') run();
   });
@@ -2729,11 +2764,31 @@ function sheetPrayerNotifs() {
   const n = S.settings.notif || {};
   const prefs = n.prayers || {};
   const t = times(dayKey());
+  const perm = 'Notification' in window ? Notification.permission : 'unsupported';
+
+  let last = null;
+  try { last = JSON.parse(localStorage.getItem('na:lastNotif') || 'null'); } catch { /* ignore */ }
+  const lastLine = last
+    ? `Last sent ${Math.max(1, Math.round((Date.now() - last.at) / 60000))} min ago`
+    : 'Nothing sent yet';
+  const stateText = perm === 'granted'
+    ? 'Notifications allowed'
+    : perm === 'denied'
+      ? 'Blocked in the browser'
+      : perm === 'unsupported' ? 'Not supported here' : 'Not allowed yet';
 
   openSheet(`
     <div class="grip"></div>
     <h3>Prayer reminders</h3>
     <p class="sheet-sub">Each prayer speaks for itself — a nudge when its window opens, and an urgent one before it closes.</p>
+
+    <div class="notif-state ${perm}">
+      <span class="dot"></span>
+      <span class="txt">${stateText}<span class="sub">${lastLine}</span></span>
+    </div>
+    ${perm === 'default' ? `<button class="btn primary wide" style="margin-bottom:14px" data-act="ask-notif">Allow notifications</button>` : ''}
+    ${perm === 'denied' ? `<p class="q-note" style="margin:0 0 14px">You dismissed the permission before. Re-allow notifications for this site in your browser settings, then reopen the app.</p>` : ''}
+
     <div class="sheet-list">
       ${PRAYER_ORDER.map((k) => `
         <button class="sheet-opt" data-act="toggle-prayer-notif" data-key="${k}">
@@ -2956,9 +3011,18 @@ const ACTIONS = {
     await notify(
       'Isha ends soon',
       'Still unlogged — pray before the window closes. (test)',
-      `test-${Date.now()}`
+      `test-${Date.now()}`,
+      { urgent: true, prayer: 'isha' }
     );
     toast('Sent — check your notification shade');
+  },
+
+  'ask-notif': async () => {
+    if (!('Notification' in window)) return toast('This browser has no notifications');
+    const res = await Notification.requestPermission();
+    closeSheet();
+    setTimeout(() => sheetPrayerNotifs(), 300);
+    toast(res === 'granted' ? 'Notifications allowed' : 'Not allowed');
   },
 
   'qibla-permission': async () => {
@@ -3605,6 +3669,14 @@ function registerSW() {
 
       navigator.serviceWorker.addEventListener('message', (event) => {
         const data = event.data;
+
+        if (data && data.type === 'NA_LOG' && data.prayer) {
+          setTimeout(() => {
+            if (S.members.length) { go('prayer'); setTimeout(() => sheetStatus(data.prayer), 350); }
+          }, 200);
+          return;
+        }
+
         if (!data || data.type !== 'NA_ACTIVATED') return;
 
         const running = sessionStorage.getItem('na:current') || APP_VERSION;

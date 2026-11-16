@@ -34,6 +34,7 @@ create table if not exists prayers (
   day        date not null,
   prayer     text not null,
   status     text not null,
+  mosque     boolean not null default false,
   logged_at  timestamptz,
   updated_at timestamptz not null default now(),
   deleted_at timestamptz
@@ -116,6 +117,22 @@ create table if not exists goals (
 create index if not exists goals_couple_updated on goals (couple_id, updated_at);
 alter table goals enable row level security;
 revoke all on goals from anon, authenticated;
+
+-- Prayer at the mosque, and excused days (menstruation).
+alter table prayers add column if not exists mosque boolean not null default false;
+
+create table if not exists cycles (
+  id         text primary key,
+  couple_id  uuid not null references couples(id) on delete cascade,
+  member_id  text not null,
+  day        date not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz
+);
+create index if not exists cycles_couple_updated on cycles (couple_id, updated_at);
+alter table cycles enable row level security;
+revoke all on cycles from anon, authenticated;
 
 -- Close the doors: the anon key alone can touch nothing.
 alter table couples     enable row level security;
@@ -201,6 +218,9 @@ begin
     'goals',
       coalesce((select jsonb_agg(to_jsonb(g)) from goals g
                 where g.couple_id = cid and g.updated_at > p_since), '[]'::jsonb),
+    'cycles',
+      coalesce((select jsonb_agg(to_jsonb(c)) from cycles c
+                where c.couple_id = cid and c.updated_at > p_since), '[]'::jsonb),
     'deletes',
       coalesce((select jsonb_agg(jsonb_build_object('kind', t.kind, 'id', t.row_id)) from tombstones t
                 where t.couple_id = cid and t.deleted_at > p_since), '[]'::jsonb),
@@ -230,11 +250,13 @@ begin
 
   if jsonb_typeof(p_data->'prayers') = 'array' then
     for r in select * from jsonb_array_elements(p_data->'prayers') loop
-      insert into prayers (id, couple_id, member_id, day, prayer, status, logged_at, updated_at)
+      insert into prayers (id, couple_id, member_id, day, prayer, status, mosque, logged_at, updated_at)
       values (r->>'id', cid, r->>'member_id', (r->>'day')::date, r->>'prayer',
-              r->>'status', nullif(r->>'logged_at','')::timestamptz, clock)
+              r->>'status', coalesce((r->>'mosque')::boolean, false),
+              nullif(r->>'logged_at','')::timestamptz, clock)
       on conflict (id) do update
         set status = excluded.status,
+            mosque = excluded.mosque,
             logged_at = excluded.logged_at,
             updated_at = clock,
             deleted_at = null;
@@ -312,6 +334,16 @@ begin
     end loop;
   end if;
 
+  if jsonb_typeof(p_data->'cycles') = 'array' then
+    for r in select * from jsonb_array_elements(p_data->'cycles') loop
+      insert into cycles (id, couple_id, member_id, day, updated_at)
+      values (r->>'id', cid, r->>'member_id', (r->>'day')::date, clock)
+      on conflict (id) do update
+        set updated_at = clock,
+            deleted_at = null;
+    end loop;
+  end if;
+
   if jsonb_typeof(p_data->'members') = 'array' then    for r in select * from jsonb_array_elements(p_data->'members') loop
       insert into members (id, couple_id, display_name, color, avatar, tz, updated_at)
       values (r->>'id', cid, r->>'name', r->>'color', r->>'avatar', r->>'tz', clock)
@@ -339,6 +371,8 @@ begin
         update reactions set deleted_at = clock, updated_at = clock where id = d->>'id' and couple_id = cid;
       elsif d->>'kind' = 'goals' then
         update goals set deleted_at = clock, updated_at = clock where id = d->>'id' and couple_id = cid;
+      elsif d->>'kind' = 'cycles' then
+        update cycles set deleted_at = clock, updated_at = clock where id = d->>'id' and couple_id = cid;
       end if;
     end loop;
   end if;

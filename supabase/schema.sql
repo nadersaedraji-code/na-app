@@ -149,6 +149,25 @@ create index if not exists nudges_couple_updated on nudges (couple_id, updated_a
 alter table nudges enable row level security;
 revoke all on nudges from anon, authenticated;
 
+-- Halal Couple: questions, games, moods, memories, events, notes.
+-- One generic row per thing, with a JSON payload, so the little world
+-- can grow without a migration for every new kind of keepsake.
+create table if not exists joy (
+  id          text primary key,
+  couple_id   uuid not null references couples(id) on delete cascade,
+  member_id   text,
+  kind        text not null,
+  day         text,
+  payload     jsonb not null default '{}'::jsonb,
+  created_at  timestamptz default now(),
+  updated_at  timestamptz not null default now(),
+  deleted_at  timestamptz
+);
+create index if not exists joy_couple_updated on joy (couple_id, updated_at);
+create index if not exists joy_couple_kind on joy (couple_id, kind);
+alter table joy enable row level security;
+revoke all on joy from anon, authenticated;
+
 -- Close the doors: the anon key alone can touch nothing.
 alter table couples     enable row level security;
 alter table members     enable row level security;
@@ -156,9 +175,10 @@ alter table prayers     enable row level security;
 alter table plan_items  enable row level security;
 alter table reviews     enable row level security;
 alter table reactions   enable row level security;
+alter table joy         enable row level security;
 alter table tombstones  enable row level security;
 
-revoke all on couples, members, prayers, plan_items, reviews, reactions, tombstones from anon, authenticated;
+revoke all on couples, members, prayers, plan_items, reviews, reactions, joy, tombstones from anon, authenticated;
 
 -- ------------------------------------------------------------
 -- na_join: create the couple on first use, or add the second
@@ -239,6 +259,9 @@ begin
     'nudges',
       coalesce((select jsonb_agg(to_jsonb(n)) from nudges n
                 where n.couple_id = cid and n.updated_at > p_since), '[]'::jsonb),
+    'joy',
+      coalesce((select jsonb_agg(to_jsonb(j)) from joy j
+                where j.couple_id = cid and j.updated_at > p_since), '[]'::jsonb),
     'deletes',
       coalesce((select jsonb_agg(jsonb_build_object('kind', t.kind, 'id', t.row_id)) from tombstones t
                 where t.couple_id = cid and t.deleted_at > p_since), '[]'::jsonb),
@@ -375,6 +398,21 @@ begin
     end loop;
   end if;
 
+  if jsonb_typeof(p_data->'joy') = 'array' then
+    for r in select * from jsonb_array_elements(p_data->'joy') loop
+      insert into joy (id, couple_id, member_id, kind, day, payload, updated_at)
+      values (r->>'id', cid, r->>'member_id', r->>'kind', r->>'day',
+              coalesce(r->'payload', '{}'::jsonb), clock)
+      on conflict (id) do update
+        set member_id = excluded.member_id,
+            kind = excluded.kind,
+            day = excluded.day,
+            payload = excluded.payload,
+            updated_at = clock,
+            deleted_at = null;
+    end loop;
+  end if;
+
   if jsonb_typeof(p_data->'members') = 'array' then    for r in select * from jsonb_array_elements(p_data->'members') loop
       insert into members (id, couple_id, display_name, color, avatar, tz, updated_at)
       values (r->>'id', cid, r->>'name', r->>'color', r->>'avatar', r->>'tz', clock)
@@ -406,6 +444,8 @@ begin
         update cycles set deleted_at = clock, updated_at = clock where id = d->>'id' and couple_id = cid;
       elsif d->>'kind' = 'nudges' then
         update nudges set deleted_at = clock, updated_at = clock where id = d->>'id' and couple_id = cid;
+      elsif d->>'kind' = 'joy' then
+        update joy set deleted_at = clock, updated_at = clock where id = d->>'id' and couple_id = cid;
       end if;
     end loop;
   end if;

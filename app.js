@@ -7,17 +7,19 @@
 import * as db from './db.js';
 import * as sync from './sync.js';
 import { BACKEND } from './config.js';
+import { createJoy } from './joy.js';
 import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '3.4.2';
+const APP_VERSION = '3.5.0';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '3.5.0', at: '16 Nov 2026', notes: "Halal Couple: questions, games, memories and a little world for two." },
   { v: '3.4.2', at: '16 Nov 2026', notes: "Notification settings now say whether an alert was delivered or shown inside the app." },
   { v: '3.4.1', at: '16 Nov 2026', notes: "The bell now reaches the other phone — and waits there until they open the app." },
   { v: '3.4.0', at: '16 Nov 2026', notes: "The room follows the sky; the tab bar glides." },
@@ -229,6 +231,7 @@ const S = {
   goals: [],
   cycles: [],
   nudges: [],
+  joy: [],
   settings: { ...DEFAULTS },
   viewerId: null,
   viewingAs: null,
@@ -468,6 +471,7 @@ async function loadState() {
   S.goals = d.goals || [];
   S.cycles = d.cycles || [];
   S.nudges = d.nudges || [];
+  S.joy = d.joy || [];
   S.settings = { ...DEFAULTS, ...(S.meta.settings?.value || {}) };
   S.settings.notif = { ...DEFAULTS.notif, ...(S.settings.notif || {}) };
   S.viewerId = d.meta?.app?.viewerId || S.members[0]?.id || null;
@@ -529,6 +533,8 @@ function showApp() {
 const ob = { step: 1, name: '', color: PALETTE[0], avatar: AVATARS[0], partner: '' };
 
 function renderOnboarding() {
+  document.querySelectorAll('body > .joy-dock').forEach((el) => el.remove());
+  document.body.classList.remove('joy-mode');
   const root = $('#onboarding');
   root.hidden = false;
   $('#app').hidden = true;
@@ -843,6 +849,10 @@ window.addEventListener('resize', positionTabPill);
 function render() {
   if (!S.members.length) return;
   const scr = $('#screen');
+  const isJoy = S.view === 'joy';
+  document.body.classList.toggle('joy-mode', isJoy);
+  const tabbar = $('#tabs');
+  if (tabbar) tabbar.hidden = isJoy;
   const banner = isPreview()
     ? `<div style="display:flex;justify-content:center;padding:6px 0 2px"><button class="preview-bar" data-act="exit-preview">Previewing as ${esc(actor()?.name)} · tap to exit</button></div>`
     : '';
@@ -850,6 +860,11 @@ function render() {
   scr.style.setProperty('--dir', String(S.dir || 0));
   document.documentElement.style.setProperty('--accent', actor()?.color || '#8AA7FF');
   scr.innerHTML = banner + `<div class="view${S.animateNext ? '' : ' calm'}${S.suppressAnim ? ' no-anim' : ''}">${VIEWS[S.view]()}</div>`;
+  // A fixed dock must live outside the transformed view, or it anchors to
+  // the animated page instead of the phone. Move it to the body.
+  document.querySelectorAll('body > .joy-dock').forEach((el) => el.remove());
+  const movedDock = scr.querySelector('.joy-dock');
+  if (movedDock) document.body.appendChild(movedDock);
   S.animateNext = false;
   renderTabs();
 }
@@ -1553,6 +1568,15 @@ function viewHome() {
     ${streakCard()}
 
     ${dayArc(who)}
+
+    <button class="joy-entry" data-act="open-joy">
+      <span class="joy-entry-glow" aria-hidden="true"></span>
+      <span class="joy-entry-kicker"><i>✦</i> Halal Couple</span>
+      <span class="joy-entry-title">A little world<br>for the two of you.</span>
+      <span class="joy-entry-sub">Questions, games, memories, and the ordinary days.</span>
+      <span class="joy-entry-foot"><b>Enter</b><span>→</span></span>
+      <span class="joy-entry-art" aria-hidden="true"><i>💞</i><i>🕌</i><i>📸</i></span>
+    </button>
 
     <div class="tiles">
       <button class="tile" data-act="tab" data-view="plan">
@@ -2436,6 +2460,7 @@ function viewSettings() {
 
     <div class="group">
       ${p ? row('edit-partner', I.heart, 'Partner', `${esc(p.name)} · joined ${new Date(p.joinedAt).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' })}`) : ''}
+      ${row('open-joy', I.heart, 'Halal Couple', 'Questions, games and the days you keep')}
       ${p ? row('nudge', I.bell, 'Send a notification', 'Arrives as the app speaking — no name attached') : ''}
       ${row('sync', I.link, sync.isOn() ? 'Two phones connected' : 'Connect the other phone', syncLine())}
       ${p ? row('preview', I.eye, isPreview() ? 'Exit partner view' : 'Preview as ' + esc(p.name), 'See the app from their side') : ''}
@@ -2533,6 +2558,7 @@ async function onRemoteChange() {
     S.pendingRemote = true;
     await loadState();
     await deliverNudges();
+    try { await joy?.remote?.(); } catch (err) { console.warn('joy notify failed', err); }
     return;
   }
   applyRemoteChange();
@@ -2543,6 +2569,7 @@ async function applyRemoteChange() {
   await loadState();
   await reconcileMembers();
   await deliverNudges();
+  try { await joy?.remote?.(); } catch (err) { console.warn('joy notify failed', err); }
   S.suppressAnim = true;
   refresh();
   S.suppressAnim = false;
@@ -3209,6 +3236,9 @@ function sheetConfirm(title, body, label, action) {  openSheet(`
 /* ============================================================
    Actions
    ============================================================ */
+/* The little world is created after the helpers, before boot. */
+let joy = null;
+
 const VIEWS = {
   home: viewHome,
   prayer: viewPrayer,
@@ -3217,10 +3247,13 @@ const VIEWS = {
   review: viewReview,
   us: viewUs,
   settings: viewSettings,
+  joy: () => (joy ? joy.view() : ''),
 };
 
 const ACTIONS = {
   tab: (el) => go(el.dataset.view),
+  joy: (el) => joy?.action(el.dataset.joyAct, el),
+  'open-joy': () => go('joy'),
   close: () => closeSheet(),
   'open-settings': () => go('settings'),
 
@@ -3809,6 +3842,11 @@ document.addEventListener('submit', async (e) => {
   const kind = form.dataset.form;
   const data = Object.fromEntries(new FormData(form).entries());
 
+  if (kind.startsWith('joy-')) {
+    await joy?.form(kind, data, form);
+    return;
+  }
+
   if (kind === 'add-task') {
     const title = String(data.title || '').trim();
     if (!title) return;
@@ -4070,6 +4108,15 @@ function registerSW() {
   if (document.readyState === 'complete') start();
   else window.addEventListener('load', start, { once: true });
 }
+
+/* ---------- Halal Couple ---------- */
+function initJoy() {
+  joy = createJoy({
+    S, db, me, other, esc, dayKey, addDays, parseDay, uid, haptic,
+    toast, openSheet, closeSheet, notify, refresh, go, sendNudge, sync,
+  });
+}
+initJoy();
 
 /* ---------- go ---------- */
 async function main() {

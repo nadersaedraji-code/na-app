@@ -7,7 +7,7 @@
 
 import * as db from './db.js';
 
-const SYNCED = new Set(['prayers', 'plan', 'reviews', 'reactions', 'members', 'goals', 'cycles', 'nudges']);
+const SYNCED = new Set(['prayers', 'plan', 'reviews', 'reactions', 'members', 'goals', 'cycles', 'nudges', 'joy']);
 const QUEUE_KEY = 'na:queue';
 
 let cfg = null;            // { mode, key, base?, url?, apikey?, lastSync? }
@@ -23,7 +23,7 @@ let state = 'off';
 function emptyQueue() {
   return {
     prayers: new Map(), plan: new Map(), reviews: new Map(),
-    reactions: new Map(), members: new Map(), goals: new Map(), cycles: new Map(), nudges: new Map(), deletes: new Map(),
+    reactions: new Map(), members: new Map(), goals: new Map(), cycles: new Map(), nudges: new Map(), joy: new Map(), deletes: new Map(),
   };
 }
 
@@ -100,6 +100,12 @@ function toWire(kind, r) {
   if (kind === 'nudges') {
     return { id: r.id, from_member: r.from, to_member: r.to, created_at: iso(r.createdAt), seen_at: iso(r.seenAt) };
   }
+  if (kind === 'joy') {
+    return {
+      id: r.id, member_id: r.memberId || null, kind: r.kind, day: r.day || null,
+      payload: r.payload || {},
+    };
+  }
   return null;
 }
 
@@ -148,6 +154,13 @@ function fromWire(kind, w) {
   if (kind === 'nudges') {
     return { ...base, id: w.id, from: w.from_member, to: w.to_member, createdAt: when(w.created_at), seenAt: when(w.seen_at) };
   }
+  if (kind === 'joy') {
+    return {
+      ...base, id: w.id, memberId: w.member_id || null, kind: w.kind,
+      day: w.day || null, payload: w.payload || {},
+      createdAt: when(w.created_at) || base.updatedAt,
+    };
+  }
   return null;
 }
 
@@ -171,7 +184,7 @@ async function rpc(name, body) {
 /* ---------- queue ---------- */
 function persistQueue() {
   const plain = { deletes: [...queue.deletes.values()] };
-  for (const k of ['prayers', 'plan', 'reviews', 'reactions', 'members', 'goals', 'cycles', 'nudges']) {
+  for (const k of ['prayers', 'plan', 'reviews', 'reactions', 'members', 'goals', 'cycles', 'nudges', 'joy']) {
     plain[k] = [...queue[k].values()];
   }
   try { localStorage.setItem(QUEUE_KEY, JSON.stringify(plain)); } catch { /* full/private */ }
@@ -182,7 +195,7 @@ function restoreQueue() {
     const raw = localStorage.getItem(QUEUE_KEY);
     if (!raw) return;
     const plain = JSON.parse(raw);
-    for (const k of ['prayers', 'plan', 'reviews', 'reactions', 'members', 'goals', 'cycles', 'nudges']) {
+    for (const k of ['prayers', 'plan', 'reviews', 'reactions', 'members', 'goals', 'cycles', 'nudges', 'joy']) {
       for (const row of plain[k] || []) queue[k].set(row.id, row);
     }
     for (const d of plain.deletes || []) queue.deletes.set(`${d.kind}:${d.id}`, d);
@@ -222,11 +235,12 @@ function buildPayload() {
     goals: [...queue.goals.values()].map((r) => toWire('goals', r)),
     cycles: [...queue.cycles.values()].map((r) => toWire('cycles', r)),
     nudges: [...queue.nudges.values()].map((r) => toWire('nudges', r)),
+    joy: [...queue.joy.values()].map((r) => toWire('joy', r)),
     deletes: [...queue.deletes.values()],
   };
   const empty = !payload.prayers.length && !payload.plan.length && !payload.reviews.length
     && !payload.reactions.length && !payload.members.length && !payload.goals.length
-    && !payload.cycles.length && !payload.nudges.length && !payload.deletes.length;
+    && !payload.cycles.length && !payload.nudges.length && !payload.joy.length && !payload.deletes.length;
   return empty ? null : payload;
 }
 
@@ -240,7 +254,7 @@ export async function flush() {
   try {
     await rpc('na_push', { p_key: cfg.key, p_data: payload });
     // only clear what we actually sent
-    for (const k of ['prayers', 'plan', 'reviews', 'reactions', 'members', 'goals', 'cycles', 'nudges']) {
+    for (const k of ['prayers', 'plan', 'reviews', 'reactions', 'members', 'goals', 'cycles', 'nudges', 'joy']) {
       for (const row of payload[k]) queue[k].delete(row.id);
     }
     for (const d of payload.deletes) queue.deletes.delete(`${d.kind}:${d.id}`);
@@ -264,7 +278,7 @@ export async function pull() {
     const data = await rpc('na_pull', { p_key: cfg.key, p_since: since });
 
     await db.mute(async () => {
-      for (const kind of ['members', 'prayers', 'plan', 'reviews', 'reactions', 'goals', 'cycles', 'nudges']) {
+      for (const kind of ['members', 'prayers', 'plan', 'reviews', 'reactions', 'goals', 'cycles', 'nudges', 'joy']) {
         for (const w of data[kind] || []) {
           const row = fromWire(kind, w);
           if (row) await db.put(kind, row);
@@ -312,7 +326,7 @@ export async function begin(member) {
   await pull();
 
   // Anything already on this device (that isn't sample data) goes up once.
-  for (const store of ['prayers', 'plan', 'reviews', 'reactions', 'goals', 'cycles', 'nudges']) {
+  for (const store of ['prayers', 'plan', 'reviews', 'reactions', 'goals', 'cycles', 'nudges', 'joy']) {
     for (const row of await db.getAll(store)) {
       if (!row.demo) queue[store].set(row.id, row);
     }

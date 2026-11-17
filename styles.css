@@ -1799,3 +1799,175 @@ body.joy-mode{
 
 .joy-mood-row{gap:3px;}
 .joy-mood{width:clamp(28px,8.5vw,42px);height:clamp(28px,8.5vw,42px);font-size:clamp(15px,4.8vw,19px);}
+
+/* ============================================================
+   HALAL COUPLE — refinement pass
+   ============================================================ */
+
+/* the header stays with you, and the page gives it room for the notch */
+body.joy-mode .screen{--joy-pad:22px;padding-top:0;}
+@media (max-width:380px){body.joy-mode .screen{--joy-pad:18px;}}
+@media (min-width:900px){body.joy-mode .screen{--joy-pad:34px;}}
+.joy-head{
+  position:sticky;top:0;z-index:35;
+  margin:0 calc(-1 * var(--joy-pad,22px));
+  padding:calc(10px + env(safe-area-inset-top)) var(--joy-pad,22px) 10px;
+  background:linear-gradient(180deg,
+    color-mix(in srgb,var(--joy-bg) 97%,transparent) 0%,
+    color-mix(in srgb,var(--joy-bg) 88%,transparent) 66%,
+    transparent 100%);
+  -webkit-backdrop-filter:blur(16px) saturate(1.2);backdrop-filter:blur(16px) saturate(1.2);
+}
+.joy-welcome{padding-top:calc(10px + env(safe-area-inset-top));}
+.joy-head .joy-round{box-shadow:0 8px 18px -16px rgba(30,10,20,.5);}
+.joy-head .joy-wordmark{font-size:18px;}
+
+/* selected mood: a gold ring, not a black one */
+.joy-mood.on{
+  box-shadow:0 0 0 2px var(--joy-card),0 0 0 3.5px var(--joy-gold),0 10px 20px -14px color-mix(in srgb,var(--joy-gold) 65%,transparent);
+}
+[data-theme="dark"] .joy-mood.on{box-shadow:0 0 0 2px var(--joy-card),0 0 0 3.5px var(--joy-gold),0 10px 20px -14px rgba(221,185,118,.4);}
+
+/* a little more depth in the main cards */
+.joy-card{
+  background:linear-gradient(180deg,color-mix(in srgb,var(--joy-card) 96%,#fff),var(--joy-card));
+  box-shadow:0 1px 0 rgba(255,255,255,.55) inset,0 20px 38px -32px rgba(60,20,35,.36);
+}
+[data-theme="dark"] .joy-card{background:linear-gradient(180deg,color-mix(in srgb,var(--joy-card) 96%,#fff 4%),var(--joy-card));box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 20px 38px -30px rgba(0,0,0,.7);}
+.joy-daily{box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 20px 38px -32px rgba(90,40,30,.28);}
+.joy-hero{box-shadow:0 30px 58px -34px rgba(50,12,28,.78),inset 0 1px 0 rgba(255,255,255,.14);}
+
+/* the Us hero gets the same little shrine as Today */
+.joy-us-arch{position:absolute;z-index:0;left:50%;bottom:104px;transform:translateX(-50%);width:clamp(170px,50vw,218px);height:clamp(170px,48vw,218px);}
+.joy-us-crest{position:absolute;z-index:2;left:50%;top:48px;transform:translateX(-50%);display:flex;align-items:center;gap:5px;}
+.joy-us-crest .joy-face{width:48px;height:48px;font-size:23px;}
+.joy-us-inner h1::after{content:"";display:block;width:38px;height:1px;background:#E7C88A;opacity:.65;margin-top:9px;}
+.joy-level-card{
+  font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;font-weight:700;white-space:nowrap;
+  color:var(--joy-gold);background:color-mix(in srgb,var(--joy-gold-soft) 46%,transparent);
+  border:1px solid color-mix(in srgb,var(--joy-gold) 24%,transparent);
+  padding:5px 8px;border-radius:99px;
+}
+[data-theme="dark"] .joy-level-card{color:#E7C88A;background:rgba(221,185,118,.12);}
+
+/* the weather: a legend, and each mood in its own colour */
+.joy-mood-legend{display:flex;align-items:center;gap:9px;font-size:8.5px;color:var(--joy-muted);white-space:nowrap;}
+.joy-mood-legend span{display:flex;align-items:center;gap:4px;}
+.joy-mood-legend i{width:18px;height:18px;border-radius:50%;display:grid;place-items:center;font-size:9px;font-style:normal;background:color-mix(in srgb,var(--tint) 22%,var(--joy-card));}
+.joy-mood-day div{gap:1px;}
+.joy-mood-day i{width:20px;height:20px;font-size:10.5px;border:1px solid var(--joy-line);background:transparent;}
+.joy-mood-day i.has{border-color:transparent;box-shadow:0 3px 7px -5px rgba(40,15,25,.35);}
+
+/* the journal: a thread, and text-only pages that don't feel empty */
+.joy-timeline{position:relative;}
+.joy-timeline::before{
+  content:"";position:absolute;left:25px;top:12px;bottom:12px;width:1px;z-index:0;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--joy-gold) 45%,transparent),var(--joy-line) 70%,transparent);
+}
+.joy-memory-entry{position:relative;z-index:1;}
+.joy-date-badge{position:relative;z-index:2;box-shadow:0 8px 20px -20px rgba(50,20,30,.35);}
+.joy-memory-inner.no-photo{border-left:2px solid color-mix(in srgb,var(--joy-gold) 40%,transparent);}
+.joy-memory-title-row{display:flex;align-items:center;gap:8px;min-width:0;}
+.joy-memory-title-row > b{min-width:0;}
+.joy-memory-emoji{
+  width:29px;height:29px;flex:none;border-radius:50%;display:grid;place-items:center;
+  background:color-mix(in srgb,var(--tint) 18%,var(--joy-card));font-size:15px;
+  border:1px solid color-mix(in srgb,var(--tint) 20%,transparent);
+}
+.joy-memory-inner.no-photo .joy-memory-text{padding-top:14px;}
+
+/* the little note in the widget gallery */
+.joy-widget.wp-note,.joy-widget.wp-memory{background:linear-gradient(150deg,#3B1024,#8A2145 58%,#C76B73);}
+.joy-widget.wp-note::before{content:"“";position:absolute;left:16px;top:8px;font-family:var(--serif);font-size:54px;line-height:1;color:rgba(255,255,255,.18);}
+.joy-widget.wp-note > span,.joy-widget.wp-memory > span{font-size:24px;position:relative;z-index:2;}
+.joy-widget.wp-note b,.joy-widget.wp-memory b{
+  font-family:var(--serif);font-size:13px;line-height:1.4;font-weight:500;letter-spacing:-.005em;
+  max-height:78px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;
+  text-align:center;margin:7px 0 0;position:relative;z-index:2;
+}
+.joy-widget.wp-note.has-drawing b{display:none;}
+.joy-widget.wp-memory::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(20,8,14,.02) 30%,rgba(20,8,14,.72));z-index:1;}
+.joy-widget.wp-memory b{margin-top:auto;padding-top:8px;}
+.joy-widget.wp-note.has-drawing img{opacity:.92;}
+
+/* section headings get the tiny gold star of the house */
+.joy-section-head h2::before{
+  content:"✦";font-family:var(--font);font-size:9px;color:var(--joy-gold);
+  margin-right:7px;vertical-align:2px;font-weight:400;
+}
+
+/* game cards: a small crafted tile for the emoji, and a little more life */
+.joy-game-emoji{
+  width:43px;height:43px;border-radius:50%;display:grid;place-items:center;
+  background:rgba(255,255,255,.52);border:1px solid rgba(255,255,255,.55);font-size:22px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.65);
+}
+[data-theme="dark"] .joy-game-emoji{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.1);}
+.joy-quick-card > span{
+  width:38px;height:38px;border-radius:50%;display:grid;place-items:center;
+  background:rgba(255,255,255,.42);border:1px solid rgba(255,255,255,.45);font-size:22px;
+}
+[data-theme="dark"] .joy-quick-card > span{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.09);}
+.joy-topic{position:relative;}
+.joy-topic::after{content:"↗";position:absolute;top:10px;right:12px;font-size:12px;color:color-mix(in srgb,var(--ink) 50%,transparent);}
+.joy-game-card,.joy-quick-card,.joy-topic,.joy-widget-card,.joy-session,.joy-memory-entry{transition:transform .18s var(--ease),box-shadow .18s var(--ease);}
+.joy-game-card:active,.joy-quick-card:active,.joy-topic:active,.joy-widget-card:active,.joy-session:active,.joy-memory-entry:active{transform:scale(.985);}
+@media (hover:hover){
+  .joy-game-card:hover,.joy-quick-card:hover,.joy-topic:hover,.joy-widget-card:hover{transform:translateY(-2px);box-shadow:0 22px 34px -28px rgba(50,20,30,.42);}
+  .joy-session:hover{background:color-mix(in srgb,var(--joy-card) 92%,var(--joy-soft));}
+}
+
+/* stages: a little glow, a little grain, and a breath between questions */
+.joy-stage-game::after{
+  content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(90% 55% at 50% -8%, color-mix(in srgb,var(--stage-glow,#E7C88A) 24%,transparent), transparent 64%),
+    radial-gradient(80% 52% at 50% 102%, rgba(0,0,0,.22), transparent 70%);
+}
+.joy-stage-game > *{position:relative;z-index:1;}
+.joy-stage-game::before{opacity:.48;}
+.joy-game-body .joy-question{animation:joyRise .42s var(--ease) both;}
+.joy-game-body .joy-wyr,.joy-game-body .joy-people,.joy-game-body .joy-daily-options,.joy-game-body .joy-stage-form{animation:joyRise .46s var(--ease) .03s both;}
+.joy-stage-body .joy-reveal,.joy-stage-body .joy-score,.joy-stage-body .joy-result-list{animation:joyRise .44s var(--ease) both;}
+@keyframes joyRise{from{opacity:0;transform:translateY(11px);}to{opacity:1;transform:none;}}
+.joy-choice-card:active,.joy-person-card:active{transform:rotate(0) scale(.976);}
+.joy-choice-card{transition:transform .18s var(--ease),box-shadow .18s var(--ease);}
+.joy-score-ring{box-shadow:0 18px 40px -28px rgba(231,200,138,.55);}
+
+/* today, gently */
+.joy-cal-day.today{box-shadow:inset 0 0 0 1px var(--joy-gold);}
+.joy-cal-day.on.today{box-shadow:none;}
+.joy-event,.joy-event-full,.joy-upcoming-row{transition:transform .15s var(--ease),background .15s var(--ease);}
+.joy-event:active,.joy-event-full:active{transform:scale(.985);}
+.joy-entry{box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 24px 44px -30px rgba(50,12,28,.8);}
+
+/* the sticky bar must be opaque — content should disappear behind it, not through it */
+.joy-head{
+  background:color-mix(in srgb,var(--joy-bg) 97%,#fff 3%);
+  border-bottom:1px solid color-mix(in srgb,var(--joy-line) 70%,transparent);
+  box-shadow:0 10px 24px -28px rgba(40,15,25,.32);
+}
+[data-theme="dark"] .joy-head{background:#171016;border-bottom-color:rgba(255,255,255,.07);box-shadow:0 10px 24px -26px rgba(0,0,0,.8);}
+
+/* event chips: give the title the whole width */
+.joy-event{display:flex;align-items:center;gap:10px;width:192px;grid-template-columns:none;}
+.joy-event-date{flex:none;}
+.joy-event-body{flex:1;min-width:0;}
+.joy-event-title{display:flex;align-items:center;gap:5px;min-width:0;}
+.joy-event-title i{font-style:normal;font-size:15px;flex:none;}
+.joy-event-title b{display:block;font-size:11.5px;line-height:1.25;font-weight:650;white-space:normal;overflow:visible;text-overflow:clip;}
+.joy-event-body small{display:block;font-size:9.5px;color:var(--joy-muted);margin-top:3px;}
+
+/* the memory caption should never clip mid-word */
+.joy-memory-preview small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+/* game stages sit in the middle of the room, like a real game */
+.joy-stage-game .joy-stage-body:not(.joy-results-body){
+  min-height:calc(100dvh - 180px);
+  display:flex;flex-direction:column;justify-content:center;
+}
+@media (max-height:700px){
+  .joy-stage-game .joy-stage-body:not(.joy-results-body){min-height:0;justify-content:flex-start;}
+}
+
+.joy-head{-webkit-backdrop-filter:none;backdrop-filter:none;}

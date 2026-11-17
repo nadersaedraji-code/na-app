@@ -12,13 +12,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '3.5.1';
+const APP_VERSION = '3.6.0';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '3.6.0', at: '17 Nov 2026', notes: 'Halal Couple, softened and sharpened — a room that stays with you, gold details, and a journal that reads like a story.' },
   { v: '3.5.1', at: '16 Nov 2026', notes: 'A new cover appears in your little world immediately.' },
   { v: '3.5.0', at: '16 Nov 2026', notes: "Halal Couple: questions, games, memories and a little world for two." },
   { v: '3.4.2', at: '16 Nov 2026', notes: "Notification settings now say whether an alert was delivered or shown inside the app." },

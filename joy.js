@@ -612,8 +612,7 @@ export function createJoy(ctx) {
         const n = daysUntil(next);
         return `<button class="joy-event" data-act="joy" data-joy-act="event-edit" data-id="${row.id}" style="--dot:${e.color || '#C4476C'}">
           <span class="joy-event-date"><b>${parseDay(next).getDate()}</b><span>${parseDay(next).toLocaleDateString('en-GB', { month: 'short' })}</span></span>
-          <span class="joy-event-emoji">${e.emoji || '💞'}</span>
-          <span class="joy-event-copy"><b>${esc(e.title || 'A day')}</b><small>${countdownText(n)}</small></span>
+          <span class="joy-event-body"><span class="joy-event-title"><i>${e.emoji || '💞'}</i><b>${esc(e.title || 'A day')}</b></span><small>${countdownText(n)}</small></span>
         </button>`;
       }).join('')}</div>` : `<div class="joy-empty-slim"><span>📅</span><div><b>No dates yet.</b><small>An anniversary, a birthday, a reunion — give the future a little shape.</small></div><button class="joy-link" data-act="joy" data-joy-act="event-new">Add</button></div>`}
     </section>`;
@@ -804,11 +803,18 @@ export function createJoy(ctx) {
     ${filterChips()}
     ${list.length ? `<div class="joy-timeline">${list.map((m) => {
       const d = m.payload?.date || dayKey(new Date(m.payload?.createdAt || Date.now()));
+      const photo = m.payload?.photos?.[0];
       return `<button class="joy-memory-entry" data-act="joy" data-joy-act="memory-view" data-id="${m.id}">
         <div class="joy-date-badge"><b>${parseDay(d).getDate()}</b><span>${parseDay(d).toLocaleDateString('en-GB', { month: 'short' })}</span><small>${parseDay(d).getFullYear()}</small></div>
-        <div class="joy-memory-inner">
-          ${m.payload?.photos?.[0] ? `<img src="${esc(m.payload.photos[0])}" alt="">` : `<div class="joy-memory-empty">${m.payload?.emoji || '📸'}</div>`}
-          <div class="joy-memory-text"><b>${esc(m.payload?.title || 'A day to keep')}</b><p>${esc(m.payload?.body || '').slice(0, 130)}</p><span>${esc(m.payload?.place || '')}</span></div>
+        <div class="joy-memory-inner ${photo ? '' : 'no-photo'}">
+          ${photo ? `<img src="${esc(photo)}" alt="">` : ''}
+          <div class="joy-memory-text">
+            <div class="joy-memory-title-row">
+              ${photo ? '' : `<span class="joy-memory-emoji" style="--tint:${colorOf(m.memberId)}">${m.payload?.emoji || '📸'}</span>`}
+              <b>${esc(m.payload?.title || 'A day to keep')}</b>
+            </div>
+            <p>${esc(m.payload?.body || '').slice(0, 130)}</p><span>${esc(m.payload?.place || '')}</span>
+          </div>
         </div>
       </button>`;
     }).join('')}</div>` : `<div class="joy-empty"><span>📔</span><h2>No pages yet</h2><p>A photograph, a place, a sentence. The first page is the hardest and the sweetest.</p><button class="joy-btn" data-act="joy" data-joy-act="memory-new">Create a memory</button></div>`}`;
@@ -927,6 +933,10 @@ export function createJoy(ctx) {
     return `<section class="joy-us-hero">
       ${coverHTML(s.cover)}
       <div class="joy-hero-shade"></div>
+      <div class="joy-hero-arch joy-us-arch" aria-hidden="true"></div>
+      <div class="joy-us-crest" aria-hidden="true">
+        ${p ? `<span class="joy-face" style="--tint:${colorOf(who()?.id)}">${avatarOf(who()?.id)}</span><span class="joy-face-star">✦</span><span class="joy-face" style="--tint:${colorOf(p.id)}">${avatarOf(p.id)}</span>` : '<span class="joy-hero-star">✦</span>'}
+      </div>
       <div class="joy-us-inner">
         <div class="joy-kicker">Us</div>
         <h1>${esc(who()?.name || 'you')} <span>&amp;</span> ${esc(p?.name || 'your person')}</h1>
@@ -954,13 +964,19 @@ export function createJoy(ctx) {
     const days = [];
     for (let i = 6; i >= 0; i--) days.push(dayKey(addDays(new Date(), -i)));
     return `<section class="joy-card joy-mood-history">
-      <div class="joy-card-head"><div><div class="joy-kicker">Our week</div><h2>The weather between us</h2></div></div>
+      <div class="joy-card-head">
+        <div><div class="joy-kicker">Our week</div><h2>The weather between us</h2></div>
+        <div class="joy-mood-legend">
+          <span><i style="--tint:${colorOf(who()?.id)}">${avatarOf(who()?.id)}</i>You</span>
+          ${p ? `<span><i style="--tint:${colorOf(p.id)}">${avatarOf(p.id)}</i>${esc(p.name)}</span>` : ''}
+        </div>
+      </div>
       <div class="joy-mood-days">${days.map((d) => {
         const mine = moodFor(who()?.id, d);
         const theirs = p ? moodFor(p.id, d) : null;
         const a = mine ? moodOf(mine.payload?.mood) : null;
         const b = theirs ? moodOf(theirs.payload?.mood) : null;
-        return `<div class="joy-mood-day"><span>${parseDay(d).toLocaleDateString('en-GB', { weekday: 'narrow' })}</span><div><i title="You">${a?.emoji || '·'}</i><i title="${esc(p?.name || 'them')}">${b?.emoji || '·'}</i></div></div>`;
+        return `<div class="joy-mood-day"><span>${parseDay(d).toLocaleDateString('en-GB', { weekday: 'narrow' })}</span><div><i class="${a ? 'has' : ''}" style="${a ? `background:${a.tint}` : ''}" title="You: ${a?.label || '—'}">${a?.emoji || ''}</i><i class="${b ? 'has' : ''}" style="${b ? `background:${b.tint}` : ''}" title="${esc(p?.name || 'them')}: ${b?.label || '—'}">${b?.emoji || ''}</i></div></div>`;
       }).join('')}</div>
     </section>`;
   }
@@ -991,7 +1007,7 @@ export function createJoy(ctx) {
   function milestonesCard() {
     const st = joyStats();
     return `<section class="joy-card">
-      <div class="joy-card-head"><div><div class="joy-kicker">Little milestones</div><h2>How far we’ve come</h2></div><span class="joy-level">Level ${levelInfo(st).level}</span></div>
+      <div class="joy-card-head"><div><div class="joy-kicker">Little milestones</div><h2>How far we’ve come</h2></div><span class="joy-level-card">Level ${levelInfo(st).level}</span></div>
       <div class="joy-level-bar"><i style="width:${levelInfo(st).pct}%"></i></div>
       <div class="joy-milestones">${MILESTONES.map((m) => {
         const earned = m.test(st);
@@ -1042,7 +1058,7 @@ export function createJoy(ctx) {
     const st = joyStats();
     if (type === 'together') return `<div class="joy-widget wp-together"><span>Together for</span><b class="num">${parts ? parts.totalDays : 0}</b><small>${parts ? `${parts.years}y · ${parts.months}m · ${parts.days}d` : 'set your date'}</small></div>`;
     if (type === 'countdown') return `<div class="joy-widget wp-countdown"><span>Next</span><b>${ev ? ev.row.payload?.emoji || '💞' : '📅'}</b><small>${ev ? `${esc(ev.row.payload?.title || 'A day')} · ${countdownText(daysUntil(ev.next))}` : 'add a special day'}</small></div>`;
-    if (type === 'memory') return `<div class="joy-widget wp-memory">${mem?.payload?.photos?.[0] ? `<img src="${esc(mem.payload.photos[0])}" alt="">` : '<span>📸</span>'}<b>${mem ? esc(mem.payload?.title || 'A memory') : 'Your first memory'}</b></div>`;
+    if (type === 'memory') return `<div class="joy-widget wp-memory">${mem?.payload?.photos?.[0] ? `<img src="${esc(mem.payload.photos[0])}" alt="">` : '<span>📸</span>'}<b>${mem ? esc((mem.payload?.title || 'A memory').slice(0, 42)) : 'Your first memory'}</b></div>`;
     if (type === 'mood') {
       const a = moodFor(who()?.id, today());
       const b = p ? moodFor(p.id, today()) : null;
@@ -1054,7 +1070,10 @@ export function createJoy(ctx) {
       const km = theirs ? distanceKm(mine, theirs) : null;
       return `<div class="joy-widget wp-distance"><span>Between us</span><b class="num">${km == null ? '—' : km < 1 ? '0' : Math.round(km)}</b><small>${km == null ? 'km' : km < 1 ? 'same sky' : 'km'}</small></div>`;
     }
-    if (type === 'note') return `<div class="joy-widget wp-note">${note?.payload?.drawing ? `<img src="${esc(note.payload.drawing)}" alt="">` : '<span>✉️</span>'}<b>${note ? esc(note.payload?.text || 'A little note').slice(0, 60) : 'Leave a note'}</b></div>`;
+    if (type === 'note') {
+      if (note?.payload?.drawing) return `<div class="joy-widget wp-note has-drawing"><img src="${esc(note.payload.drawing)}" alt=""></div>`;
+      return `<div class="joy-widget wp-note"><span>✉️</span><b>${note ? esc((note.payload?.text || 'A little note').slice(0, 78)) : 'Leave a note'}</b></div>`;
+    }
     return `<div class="joy-widget wp-streak"><span>Our streak</span><b class="num">${st.current}</b><small>days of showing up</small></div>`;
   }
 
@@ -1134,8 +1153,8 @@ export function createJoy(ctx) {
     J.tab = tab;
     S.dir = 0;
     S.animateNext = true;
-    refresh();
     window.scrollTo(0, 0);
+    refresh();
   }
 
   function clearStageTimer() {
@@ -1423,7 +1442,7 @@ export function createJoy(ctx) {
     const prefix = game === 'wyr' ? 'Would you rather…' : game === 'wml' ? 'Who is more likely to…' : game === 'nhie' ? 'Never have I ever…' : game === 'thisthat' ? 'Pick one…' : '';
     const special = game === 'truthdare' ? `<div class="joy-td-type ${item.type}">${item.type === 'dare' ? 'Dare' : 'Truth'}</div>` : '';
     return `${stageTop(meta.emoji + ' ' + meta.title, meta.short || meta.title, `${index + 1} / ${total}`)}
-      <div class="joy-game-progress"><i style="width:${Math.round(((index) / total) * 100)}%"></i></div>
+      <div class="joy-game-progress"><i style="width:${Math.round(((index + 1) / total) * 100)}%"></i></div>
       <div class="joy-stage-body joy-game-body">
         ${prefix ? `<div class="joy-stage-kicker">${prefix}</div>` : ''}
         ${special}
@@ -2476,7 +2495,7 @@ export function createJoy(ctx) {
     begin: () => openIntro(),
     settings: () => openJoySettings(),
     tab: (el) => move(el.dataset.joyTab),
-    'journal-tab': (el) => { J.journalTab = el.dataset.tab; refresh(); window.scrollTo(0, 0); },
+    'journal-tab': (el) => { J.journalTab = el.dataset.tab; window.scrollTo(0, 0); refresh(); },
     'cal-move': (el) => {
       const d = Number(el.dataset.d);
       J.calendarMonth = new Date(J.calendarMonth.getFullYear(), J.calendarMonth.getMonth() + d, 1);

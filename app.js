@@ -12,13 +12,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '3.6.1';
+const APP_VERSION = '3.6.2';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '3.6.2', at: '19 Nov 2026', notes: 'Counting now begins on 19 November.' },
   { v: '3.6.1', at: '17 Nov 2026', notes: 'Counting now begins on 18 November.' },
   { v: '3.6.0', at: '17 Nov 2026', notes: 'Halal Couple, softened and sharpened — a room that stays with you, gold details, and a journal that reads like a story.' },
   { v: '3.5.1', at: '16 Nov 2026', notes: 'A new cover appears in your little world immediately.' },
@@ -302,16 +303,16 @@ async function ensureStartDate() {
 }
 
 /* One quiet correction: this couple asked for counting to begin on
-   18 November 2026. Existing installs move once; a later manual choice
+   19 November 2026. Existing installs move once; a later manual choice
    in Settings is respected forever after. */
 async function alignCountingStart() {
-  if (S.settings.countingFromMoved === '2026-11-18') return;
+  if (S.settings.countingFromMoved === '2026-11-19') return;
   if (!S.members.length) return;
-  const changed = S.settings.startDate !== '2026-11-18';
-  S.settings.countingFromMoved = '2026-11-18';
-  if (changed) S.settings.startDate = '2026-11-18';
+  const changed = S.settings.startDate !== '2026-11-19';
+  S.settings.countingFromMoved = '2026-11-19';
+  if (changed) S.settings.startDate = '2026-11-19';
   await db.put('meta', { key: 'settings', value: S.settings });
-  if (changed) setTimeout(() => toast('Counting now begins 18 November'), 900);
+  if (changed) setTimeout(() => toast('Counting now begins 19 November'), 900);
 }
 
 /* ---------- state access ---------- */

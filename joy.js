@@ -2359,7 +2359,7 @@ export function createJoy(ctx) {
     openSheet(`<div class="grip"></div>
       <h3>Our little streak</h3>
       <p class="sheet-sub">A day counts when you have both answered the daily question. A freeze can protect one missed day each month.</p>
-      <div class="joy-streak-sheet-figure"><span>🔥</span><b class="num">${st.current}</b><small>days now · ${st.best} best</small></div>
+      <div class="joy-streak-sheet-figure"><span>🔥</span><b class="num">${st.current}</b><small>${st.current === 1 ? 'day' : 'days'} now · ${st.best} best</small></div>
       <div class="joy-streak-month">${days.map((d) => `<i class="${bothAnswered(d) || frozen(d) ? 'good' : ''} ${d === today() ? 'today' : ''}" title="${shortDay(d)}"></i>`).join('')}</div>
       ${st.freezeAvailable ? `<button class="btn wide" data-act="joy" data-joy-act="freeze">${icon('spark', 16)} Use this month’s freeze</button>` : `<p class="q-note">This month’s freeze has already been used.</p>`}
       <button class="sheet-opt cancel" data-act="close" style="margin-top:10px">Close</button>

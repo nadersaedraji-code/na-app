@@ -12,13 +12,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '3.9.0';
+const APP_VERSION = '3.9.1';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '3.9.1', at: '19 Nov 2026', notes: 'A blank notification can no longer leave your phone, and one day finally reads like one day.' },
   { v: '3.9.0', at: '19 Nov 2026', notes: 'Sixty-four more game prompts for the two of you, and the last small labels that were hiding in the dark.' },
   { v: '3.8.3', at: '19 Nov 2026', notes: 'The weekly recap fits together, the daily chat opens with the question, and long result prompts never hide under a label.' },
   { v: '3.8.2', at: '19 Nov 2026', notes: 'Thirty more questions for the quiet days, a clearer month, and Dhuhr that reads D.' },
@@ -2627,6 +2628,8 @@ async function applyRemoteChange() {
 
 /** A nudge arrives as the app speaking — never as the partner's name. */
 async function sendNudge(message = '') {
+  const text = String(message || '').trim();
+  if (!text) return toast('Write something first');
   const who = me();
   const partner = other(who);
   if (!partner) return toast('No partner yet');
@@ -2637,7 +2640,7 @@ async function sendNudge(message = '') {
     from: who.id,
     targetType: 'ping',
     targetId: partner.id,
-    emoji: String(message || '').slice(0, 140),
+    emoji: text.slice(0, 140),
     day: dayKey(),
     createdAt: Date.now(),
   };
@@ -2680,14 +2683,21 @@ function sheetPing() {
     <h3>Send a notification</h3>
     <p class="sheet-sub">It arrives as the app speaking — your name stays out of it. It will find them the next time their app is open.</p>
     <form data-form="send-ping">
-      <textarea class="area" name="message" maxlength="140" placeholder="Write something…" style="min-height:86px"></textarea>
+      <textarea class="area" name="message" id="ping-message" maxlength="140" placeholder="Write something…" style="min-height:86px"></textarea>
       <div class="ping-phrases">
         ${['Thinking of you', 'Pray for me', 'You’ve got this', 'Call me when you’re free']
           .map((p) => `<button type="button" class="chip" data-act="ping-phrase" data-text="${esc(p)}">${esc(p)}</button>`).join('')}
       </div>
-      <button class="btn primary wide" type="submit" style="margin-top:14px">Send</button>
+      <button class="btn primary wide" type="submit" id="ping-send" style="margin-top:14px" disabled>Send</button>
     </form>
-  `, (sheet) => sheet.querySelector('textarea')?.focus());
+  `, (sheet) => {
+    const area = sheet.querySelector('#ping-message');
+    const btn = sheet.querySelector('#ping-send');
+    const sync = () => { if (btn) btn.disabled = !area?.value.trim(); };
+    area?.addEventListener('input', sync);
+    area?.focus();
+    sync();
+  });
 }
 
 const PING_SEEN_KEY = 'na:pingsSeen';
@@ -3440,7 +3450,11 @@ const ACTIONS = {
   'ping-phrase': (el) => {
     const sheet = document.querySelector('.sheet');
     const area = sheet?.querySelector('textarea[name="message"]');
-    if (area) { area.value = el.dataset.text; area.focus(); }
+    if (area) {
+      area.value = el.dataset.text;
+      area.dispatchEvent(new Event('input', { bubbles: true }));
+      area.focus();
+    }
   },
 
   'prayer-notifs': () => sheetPrayerNotifs(),
@@ -4057,6 +4071,7 @@ document.addEventListener('submit', async (e) => {
 
   if (kind === 'send-ping') {
     const message = String(data.message || '').trim();
+    if (!message) return toast('Write something first');
     closeSheet();
     await sendNudge(message);
     return;

@@ -12,13 +12,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '3.6.2';
+const APP_VERSION = '3.7.0';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '3.7.0', at: '19 Nov 2026', notes: 'Home opens with the day; the mosque is gold; the plan shows its middle state.' },
   { v: '3.6.2', at: '19 Nov 2026', notes: 'Counting now begins on 19 November.' },
   { v: '3.6.1', at: '17 Nov 2026', notes: 'Counting now begins on 18 November.' },
   { v: '3.6.0', at: '17 Nov 2026', notes: 'Halal Couple, softened and sharpened — a room that stays with you, gold details, and a journal that reads like a story.' },
@@ -855,7 +856,12 @@ function positionTabPill() {
   const inner = document.querySelector('.tabs-inner');
   const active = inner?.querySelector('.tab[aria-current="page"]');
   const pill = inner?.querySelector('.tab-pill');
-  if (!inner || !active || !pill) return;
+  if (!inner || !pill) return;
+  if (!active) {
+    pill.style.opacity = '0';
+    return;
+  }
+  pill.style.opacity = '1';
   const r = active.getBoundingClientRect();
   const b = inner.getBoundingClientRect();
   pill.style.width = `${r.width}px`;
@@ -1574,6 +1580,8 @@ function viewHome() {
       <h1>${greeting()}, ${esc(who.name)}</h1>
     </div>
 
+    ${dayArc(who)}
+
     ${verseCard()}
 
     ${recapBanner()}
@@ -1584,8 +1592,6 @@ function viewHome() {
     </section>
 
     ${streakCard()}
-
-    ${dayArc(who)}
 
     <button class="joy-entry" data-act="open-joy">
       <span class="joy-entry-glow" aria-hidden="true"></span>
@@ -1804,11 +1810,11 @@ function viewPrayer() {
     const fresh = S.justLogged === k && state !== 'pending' ? ' data-fresh="1"' : '';
     const flood = state === 'ontime' ? 'var(--ok)' : state === 'late' ? 'var(--late)' : state === 'missed' ? 'var(--miss)' : state === 'period' ? 'var(--pink)' : 'transparent';
     return `
-      <button class="prow" data-act="log" data-key="${k}" data-state="${state}"${fresh} style="--flood:${flood}">
+      <button class="prow" data-act="log" data-key="${k}" data-state="${state}" data-mosque="${rec?.mosque ? '1' : '0'}"${fresh} style="--flood:${flood}">
         <span class="glyph">${state === 'ontime' ? '✓' : state === 'late' ? '◔' : state === 'missed' ? '✕' : state === 'period' ? '—' : '○'}</span>
         <span class="meta">
-          <span class="name">${PMETA[k].name}<span class="ar">${PMETA[k].ar}</span></span>
-          <span class="window num">${rec?.mosque ? `<span class="mosque-ico">${I.mosque}</span>` : ''}${fmtTime(t[k])} – ${fmtTime(t.onTimeEnd[k])}</span>
+          <span class="name">${PMETA[k].name}${rec?.mosque ? `<span class="mosque-tag">${I.mosque} Mosque</span>` : ''}<span class="ar">${PMETA[k].ar}</span></span>
+          <span class="window num">${fmtTime(t[k])} – ${fmtTime(t.onTimeEnd[k])}</span>
         </span>
         <span class="pill ${state}"><span class="dot"></span>${STATUS_LABEL[state]}</span>
       </button>`;
@@ -1966,7 +1972,8 @@ function taskRow(t, editable) {
       </button>
       <div class="body">
         <div class="title">${esc(t.title)}</div>
-        ${t.timeLabel || t.priority === 'important' ? `<div class="meta">
+        ${t.timeLabel || t.priority === 'important' || st === 'partial' ? `<div class="meta">
+          ${st === 'partial' ? '<span class="badge-partial">Partly</span>' : ''}
           ${t.timeLabel ? `<span class="badge-time num">${esc(t.timeLabel)}</span>` : ''}
           ${t.priority === 'important' ? '<span class="prio"></span><span>important</span>' : ''}
         </div>` : ''}
@@ -2153,7 +2160,7 @@ function viewReview() {
             <span class="avatar" style="width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:var(--card-hi);border:1px solid var(--line)">${p.avatar}</span>
             <div>
               <div style="font-size:14px;font-weight:600">${esc(p.name)}</div>
-              <div style="font-size:12px;color:var(--ink-3)">logged ${new Date(theirs.updatedAt).toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' })}</div>
+              <div style="font-size:12px;color:var(--ink-3)">logged ${new Date(theirs.updatedAt || parseDay(theirs.day).getTime()).toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' })}</div>
             </div>
           </div>
           ${theirs.wins ? `<div style="font-size:14.5px;line-height:1.6;color:var(--ink-2);margin-bottom:14px">${esc(theirs.wins)}</div>` : ''}
@@ -2235,8 +2242,9 @@ function trendCard() {
 
   const pts = trendPoints(30);
   if (pts.length < 2) {
+    const hasReview = S.reviews.length > 0;
     return `<div class="card card-pad">
-      <div class="empty-note"><b>The lines begin tonight</b>Save a review and tomorrow's graph will have its first point.</div>
+      <div class="empty-note"><b>${hasReview ? 'Your first line begins tomorrow' : 'The lines begin tonight'}</b>${hasReview ? 'Today is saved. The graph will draw itself from tomorrow.' : "Save a review and tomorrow's graph will have its first point."}</div>
     </div>`;
   }
 
@@ -2470,12 +2478,14 @@ function viewSettings() {
       </div>
     </header>
 
+    <div class="settings-label">You</div>
     <div class="group">
       ${row('edit-name', I.user, 'Your name', esc(who?.name || ''), '')}
       ${row('edit-color', I.palette, 'Your colour', 'Used across the app', '', `style="--dot:${who?.color}"`)}
       ${row('edit-avatar', who?.avatar || '🌙', 'Your avatar', '', '')}
     </div>
 
+    <div class="settings-label">The two of you</div>
     <div class="group">
       ${p ? row('edit-partner', I.heart, 'Partner', `${esc(p.name)} · joined ${new Date(p.joinedAt).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' })}`) : ''}
       ${row('open-joy', I.heart, 'Halal Couple', 'Questions, games and the days you keep')}
@@ -2484,6 +2494,7 @@ function viewSettings() {
       ${p ? row('preview', I.eye, isPreview() ? 'Exit partner view' : 'Preview as ' + esc(p.name), 'See the app from their side') : ''}
     </div>
 
+    <div class="settings-label">Faith &amp; place</div>
     <div class="group">
       ${row('source', I.mosque, 'Prayer times', S.settings.preset === 'cluj' ? 'Masjid Cluj-Napoca · Mawaqit' : `Calculated · ${METHODS[S.settings.method]?.label || ''}`)}
       ${!S.settings.preset ? row('method', I.sliders, 'Calculation method', METHODS[S.settings.method]?.label || 'Muslim World League') : ''}
@@ -2491,21 +2502,23 @@ function viewSettings() {
       ${row('times-today', I.clock, "Today's times", '', '')}
     </div>
 
+    <div class="settings-label">Reminders</div>
     <div class="group">
       ${row('prayer-notifs', I.bell, 'Notifications', prayerNotifLine())}
       ${toggle('review', 'Evening review', 'A prompt to close the day')}
       ${toggle('partner', 'From your partner', 'Reactions and notes')}
     </div>
 
+    <div class="settings-label">Appearance</div>
     <div class="group">
       <div class="row" style="display:block">
-        <div class="t" style="margin-bottom:10px">Appearance</div>
         <div class="seg" style="margin:0">
           ${['dark', 'light', 'system'].map((t) => `<button data-act="theme" data-theme="${t}" aria-selected="${(S.settings.theme || 'dark') === t}">${t[0].toUpperCase() + t.slice(1)}</button>`).join('')}
         </div>
       </div>
     </div>
 
+    <div class="settings-label">This device</div>
     <div class="group">
       ${installed ? row('noop', I.check, 'Installed', 'Running as an app on this device') : row('install', I.phone, 'Install on this device', 'Add to your home screen')}
       ${row('export', I.download, 'Export a backup', 'Every day, as a JSON file')}
@@ -2514,6 +2527,7 @@ function viewSettings() {
       ${row('reset', I.trash, 'Reset everything', 'Erases this couple space on this device')}
     </div>
 
+    <div class="settings-label">Counting &amp; updates</div>
     <div class="group">
       ${row('start-date', I.calendar, 'Counting from', new Date(parseDay(statsStart())).toLocaleDateString(LOCALE, { day: 'numeric', month: 'long', year: 'numeric' }))}
       ${row('check-updates', I.refresh, 'Check for updates', 'Reload the newest build', `v${APP_VERSION}`)}

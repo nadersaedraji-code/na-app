@@ -14,7 +14,7 @@
   --bg-soft:#1D1620;
   --ink:#FEFAFB;
   --ink-2:rgba(254,250,251,.66);
-  --ink-3:rgba(254,250,251,.46);
+  --ink-3:rgba(254,250,251,.55);
   --line:rgba(255,255,255,.07);
   --line-2:rgba(255,255,255,.13);
   --card:linear-gradient(180deg,rgba(255,255,255,.085),rgba(255,255,255,.035));
@@ -62,7 +62,7 @@
   --bg-soft:#FFFFFF;
   --ink:#1E171A;
   --ink-2:rgba(30,23,26,.74);
-  --ink-3:rgba(30,23,26,.64);
+  --ink-3:rgba(30,23,26,.67);
   --line:rgba(30,23,26,.075);
   --line-2:rgba(30,23,26,.14);
   --card:linear-gradient(180deg,#FFFFFF,#FFFBFC);
@@ -1971,3 +1971,59 @@ body.joy-mode .screen{--joy-pad:22px;padding-top:0;}
 }
 
 .joy-head{-webkit-backdrop-filter:none;backdrop-filter:none;}
+
+/* — audit batch: mosque gold, half-done clarity, honest tab state — */
+.prow[data-mosque="1"]{
+  box-shadow:inset 2px 0 0 var(--gold);
+  background:linear-gradient(90deg,color-mix(in srgb,var(--gold) 12%,var(--card-flat)),var(--card-flat) 74%);
+}
+.prow[data-mosque="1"] .glyph{background:color-mix(in srgb,var(--gold) 20%,transparent);color:var(--gold);}
+[data-theme="light"] .prow[data-mosque="1"] .glyph{color:#8A6424;}
+.prow[data-mosque="1"][data-state="period"]{background:color-mix(in srgb,var(--pink) 13%,var(--card-flat));box-shadow:inset 2px 0 0 var(--gold);}
+.prow[data-mosque="1"][data-state="period"] .glyph{background:color-mix(in srgb,var(--gold) 16%,transparent);color:var(--gold);}
+.mosque-tag{
+  display:inline-flex;align-items:center;gap:3px;margin-left:7px;padding:2px 6px;border-radius:99px;
+  background:color-mix(in srgb,var(--gold) 14%,transparent);color:var(--gold);
+  font-family:var(--font);font-size:7.5px;line-height:1.2;letter-spacing:.08em;text-transform:uppercase;font-weight:700;
+  vertical-align:1px;
+}
+.mosque-tag svg{width:10px;height:10px;}
+[data-theme="light"] .mosque-tag{color:#8A6424;background:#F1E3C6;}
+
+.task .badge-partial{
+  padding:2px 7px;border-radius:6px;background:color-mix(in srgb,var(--late) 18%,transparent);
+  color:var(--late-ink);font-size:10px;font-weight:650;letter-spacing:.02em;
+}
+.task.partial .title{text-decoration:none;}
+
+.tab-pill{transition:transform .52s var(--spring),width .52s var(--spring),opacity .2s var(--ease);}
+.tabs-inner.ready .tab-pill{transition:transform .52s var(--spring),width .52s var(--spring),opacity .2s var(--ease);}
+
+.dayarc + .verse{margin-top:14px;}
+
+/* partly done is its own warm state, not a half-finished error */
+.task .check.partial{background:linear-gradient(90deg,var(--gold) 0 50%,transparent 50% 100%);box-shadow:inset 0 0 0 1.6px var(--gold);}
+.task .badge-partial{background:color-mix(in srgb,var(--gold) 16%,transparent);color:var(--gold);}
+[data-theme="light"] .task .badge-partial{background:#F1E3C6;color:#8A6424;}
+
+/* settings becomes scannable instead of one long white ribbon */
+.settings-label{
+  font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3);
+  font-weight:650;margin:18px 4px 8px;
+}
+.head + .settings-label{margin-top:4px;}
+
+/* explicit dark mosque row — no color-mix surprises in low light */
+[data-theme="dark"] .prow[data-mosque="1"]{
+  background:linear-gradient(90deg,rgba(216,178,106,.14),rgba(255,255,255,.055) 74%);
+}
+[data-theme="dark"] .prow[data-mosque="1"] .glyph{background:rgba(216,178,106,.16);color:#D8B26A;}
+[data-theme="dark"] .prow[data-mosque="1"][data-state="period"]{
+  background:color-mix(in srgb,var(--pink) 12%,var(--card-flat));
+}
+
+/* keyboard focus is allowed to be visible; touch is unaffected */
+button:focus-visible,a:focus-visible,[role="button"]:focus-visible,[tabindex]:focus-visible{
+  outline:2px solid color-mix(in srgb,var(--pink) 70%,var(--ink));
+  outline-offset:3px;
+}

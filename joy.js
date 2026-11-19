@@ -223,6 +223,12 @@ export function createJoy(ctx) {
     return (session?.payload?.deck || []).map((id) => contentItem(session, id)).filter(Boolean);
   }
 
+  function questionPreview(item) {
+    if (!item) return '';
+    if (item.a?.text && item.b?.text) return `${item.a.text} or ${item.b.text}`;
+    return item.prompt || '';
+  }
+
   function sessionProgress(session, memberId) {
     const deck = sessionDeck(session);
     let done = 0;
@@ -427,7 +433,7 @@ export function createJoy(ctx) {
   function header() {
     return `<header class="joy-head">
       <button class="joy-round" data-act="joy" data-joy-act="exit" aria-label="Back to N&amp;A">${icon('back')}</button>
-      <div class="joy-wordmark"><span class="joy-star" aria-hidden="true">✦</span><span>Halal Couple</span></div>
+      <div class="joy-wordmark" role="heading" aria-level="1"><span class="joy-star" aria-hidden="true">✦</span><span>Halal Couple</span></div>
       <button class="joy-round" data-act="joy" data-joy-act="settings" aria-label="Halal Couple settings">${icon('settings', 18)}</button>
     </header>`;
   }
@@ -513,7 +519,7 @@ export function createJoy(ctx) {
         ${parts ? `
           <div class="joy-hero-kicker">Together for</div>
           <div class="joy-counter" data-joy-counter>${counterUnits(parts)}</div>
-          <div class="joy-hero-since">since ${shortDay(s.anniversary)} · ${parts.totalDays} days</div>
+          <div class="joy-hero-since">since ${shortDay(s.anniversary)} ${parseDay(s.anniversary).getFullYear()} · ${parts.totalDays} days</div>
         ` : `
           <div class="joy-hero-kicker">Your story</div>
           <h1 class="joy-hero-empty">A little world<br>waiting for its date.</h1>
@@ -701,10 +707,19 @@ export function createJoy(ctx) {
     const theirs = partner() ? sessionProgress(session, partner().id) : { done: 0 };
     const status = sessionStatus(session);
     const score = sessionScore(session);
+    const deck = sessionDeck(session);
+    const next = deck[mine.done];
+    const preview = questionPreview(next);
+    const title = status === 'yours' && preview ? preview : meta.title;
+    const sub = status === 'results'
+      ? `${score.score != null ? `${score.score}% overlap` : `${score.shared} shared answers`} · finished`
+      : status === 'waiting'
+        ? `Waiting for ${esc(nameOf(partner()?.id))}`
+        : `${meta.title} · ${mine.done} of ${mine.total} answered`;
     return `<button class="joy-session" data-act="joy" data-joy-act="session" data-id="${session.id}">
       <span class="joy-session-emoji" style="background:${meta.tint}">${meta.emoji}</span>
-      <span class="joy-session-copy"><b>${meta.title}</b><small>${status === 'results' ? `${score.score != null ? `${score.score}% overlap` : `${score.shared} shared answers`} · finished` : status === 'waiting' ? `Waiting for ${esc(nameOf(partner()?.id))}` : `${mine.done} of ${mine.total} answered`}</small></span>
-      <span class="joy-session-state">${status === 'results' ? '↗' : status === 'waiting' ? '…' : 'Play'}</span>
+      <span class="joy-session-copy"><b>${esc(title)}</b><small>${sub}</small></span>
+      <span class="joy-session-state">${status === 'results' ? '↗' : status === 'waiting' ? '…' : mine.done ? 'Continue' : 'Play'}</span>
     </button>`;
   }
 
@@ -1371,6 +1386,8 @@ export function createJoy(ctx) {
     if (!p) return toast('Connect the other phone first');
     const meta = GAME_META[gameId];
     if (!meta) return;
+    const unfinished = sessions().find((s) => s.payload?.game === gameId && sessionProgress(s, who().id).done < sessionDeck(s).length);
+    if (unfinished) return openSession(unfinished.id);
     const deck = pickDeck(gameId, meta.size);
     if (!deck.length) return toast('This game is still being written');
     const session = {
@@ -1388,6 +1405,8 @@ export function createJoy(ctx) {
     if (!p) return toast('Connect the other phone first');
     const qs = DAILY_BY_CAT[catId] || [];
     if (!qs.length) return toast('This topic is still being written');
+    const unfinished = sessions().find((s) => s.payload?.game === 'topic' && s.payload?.category === catId && sessionProgress(s, who().id).done < sessionDeck(s).length);
+    if (unfinished) return openSession(unfinished.id);
     const session = {
       id: `game|${uid()}`, kind: 'game', memberId: who().id, day: today(),
       payload: { game: 'topic', category: catId, deck: qs.map((q) => q.id), createdAt: Date.now(), createdBy: who().id },

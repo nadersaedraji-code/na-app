@@ -12,13 +12,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '3.8.0';
+const APP_VERSION = '3.8.1';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '3.8.1', at: '19 Nov 2026', notes: 'Rounds remember where you were, the years say their names, and small gold text reads clearly.' },
   { v: '3.8.0', at: '19 Nov 2026', notes: 'The month reads at a glance, quiet reminders wait in Settings, and the app opens offline.' },
   { v: '3.7.2', at: '19 Nov 2026', notes: 'Quiet details: human notification ages, and one gold language for partly done.' },
   { v: '3.7.1', at: '19 Nov 2026', notes: 'A kinder first run: back, a picker that shows more, and honest disabled buttons.' },
@@ -2172,7 +2173,7 @@ function viewReview() {
             <span class="avatar" style="width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:var(--card-hi);border:1px solid var(--line)">${p.avatar}</span>
             <div>
               <div style="font-size:14px;font-weight:600">${esc(p.name)}</div>
-              <div style="font-size:12px;color:var(--ink-3)">logged ${new Date(theirs.updatedAt || parseDay(theirs.day).getTime()).toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' })}</div>
+              <div style="font-size:12px;color:var(--ink-3)">${theirs.updatedAt && dayKey(new Date(theirs.updatedAt)) === today ? `logged ${new Date(theirs.updatedAt).toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' })}` : 'logged today'}</div>
             </div>
           </div>
           ${theirs.wins ? `<div style="font-size:14.5px;line-height:1.6;color:var(--ink-2);margin-bottom:14px">${esc(theirs.wins)}</div>` : ''}
@@ -2182,7 +2183,7 @@ function viewReview() {
           </div>
           ${theirs.highlight ? `<div style="font-size:13.5px;color:var(--ink-3);margin-top:12px">“${esc(theirs.highlight)}”</div>` : ''}
           <div style="display:flex;gap:8px;margin-top:16px">
-            <button class="btn" data-act="react-review" data-id="${theirs.id}">React</button>
+            <button class="btn soft" data-act="react-review" data-id="${theirs.id}">${I.heart} React</button>
           </div>
           ${noteBlock(theirs, who, p)}
         ` : `<div class="empty" style="border:0;padding:14px"><b>Not written yet</b>${esc(p.name)} hasn't logged today. Give them time.</div>`}
@@ -2202,7 +2203,7 @@ function noteBlock(review, fromMember, toMember) {
   return `
     <form data-form="add-note" data-review="${review.id}" style="margin-top:14px">
       <input class="line" name="note" placeholder="Leave ${esc(toMember.name)} a word…" maxlength="140">
-      <button class="btn wide" type="submit" style="margin-top:8px">Send</button>
+      <button class="btn soft wide" type="submit" style="margin-top:8px">Send</button>
     </form>`;
 }
 

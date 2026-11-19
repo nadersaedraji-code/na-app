@@ -65,6 +65,10 @@ curl -s https://nadersaedraji-code.github.io/na-app/app.js | grep APP_VERSION
 | `joy-content.js` | original halal content: 120 daily questions, 220 game prompts |
 | `joy-map.js` | offline world map used by the memory map |
 
+CSS pitfall: `.mini` is the small prayer chip (25 × 32 px). The recap heatmap
+uses `.week.week-heat`, not `.week.mini`, because `.mini` would shrink the
+whole grid.
+
 Data lives in IndexedDB (`na-app`), store per entity. Sync is wired and tested
 against the local server; the cloud project was never created.
 

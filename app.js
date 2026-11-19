@@ -12,13 +12,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '3.8.2';
+const APP_VERSION = '3.8.3';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '3.8.3', at: '19 Nov 2026', notes: 'The weekly recap fits together, the daily chat opens with the question, and long result prompts never hide under a label.' },
   { v: '3.8.2', at: '19 Nov 2026', notes: 'Thirty more questions for the quiet days, a clearer month, and Dhuhr that reads D.' },
   { v: '3.8.1', at: '19 Nov 2026', notes: 'Rounds remember where you were, the years say their names, and small gold text reads clearly.' },
   { v: '3.8.0', at: '19 Nov 2026', notes: 'The month reads at a glance, quiet reminders wait in Settings, and the app opens offline.' },
@@ -1056,7 +1057,7 @@ function weekNarrative(s) {
 }
 
 function weekMini(memberId, days) {
-  return `<div class="week mini">${days.map((day) => {
+  return `<div class="week week-heat">${days.map((day) => {
     const d = parseDay(day);
     const dots = PRAYER_ORDER.map((k) => `<i class="dot ${getPrayer(memberId, day, k)?.status || ''}"></i>`).join('');
     return `<div class="col"><span class="dow">${d.toLocaleDateString(LOCALE, { weekday: 'narrow' })}</span>${dots}</div>`;

@@ -1346,7 +1346,7 @@ export function createJoy(ctx) {
         </div>
         ${isChoice && !same ? `<p class="joy-result-note">Different choices, same table. Talk about what you picked.</p>` : `<p class="joy-result-note">${isChoice ? 'A little overlap in the ordinary. Keep it.' : 'Two honest answers. That is the whole point.'}</p>`}
         <div class="joy-streak-mini">🌱 ${joyStreak().current} day streak</div>
-        <button class="joy-btn" data-act="joy" data-joy-act="chat" data-thread="daily|${today()}" data-title="Today’s question">${icon('chat', 17)} Talk about it</button>
+        <button class="joy-btn" data-act="joy" data-joy-act="chat" data-thread="daily|${today()}" data-title="Today’s question" data-intro="${esc(q.prompt)}">${icon('chat', 17)} Talk about it</button>
         <button class="joy-btn ghost" data-act="joy" data-joy-act="stage-close">Done</button>
       </div>`;
   }
@@ -1881,7 +1881,7 @@ export function createJoy(ctx) {
 
   function chatBodyHTML(thread) {
     const msgs = chatMessages(thread);
-    if (!msgs.length) return `<div class="joy-chat-empty"><span>🤍</span><p>A quiet thread, just for this. Say the thing you would say if you were sitting together.</p></div>`;
+    if (!msgs.length) return `<div class="joy-chat-empty"><span>🤍</span>${J.chatIntro ? `<p class="q">“${esc(J.chatIntro)}”</p><small>A quiet thread, just for this.</small>` : `<p>A quiet thread, just for this. Say the thing you would say if you were sitting together.</p>`}</div>`;
     return msgs.map((m) => {
       const mine = m.memberId === who()?.id;
       return `<div class="joy-msg ${mine ? 'mine' : ''}">
@@ -1899,7 +1899,8 @@ export function createJoy(ctx) {
     if (atBottom) body.scrollTop = body.scrollHeight;
   }
 
-  function openChat(thread, title) {
+  function openChat(thread, title, intro) {
+    J.chatIntro = intro || '';
     openStage(`<div class="joy-stage-top">
         <button class="joy-stage-x" data-act="joy" data-joy-act="stage-close" aria-label="Close">${icon('close', 18)}</button>
         <div class="joy-stage-title"><span>Just the two of you</span><b>${esc(title || 'Talk about it')}</b></div>
@@ -2643,7 +2644,7 @@ export function createJoy(ctx) {
     },
     'game-skip': () => answerGame({ skipped: true }),
     replay: (el) => { const game = el.dataset.game; if (game === 'topic' && el.dataset.cat) startTopic(el.dataset.cat); else startGame(game); },
-    chat: (el) => openChat(el.dataset.thread, el.dataset.title),
+    chat: (el) => openChat(el.dataset.thread, el.dataset.title, el.dataset.intro),
     'chat-quick': (el) => sendChat(el.dataset.thread, el.dataset.text),
     widget: (el) => openWidget(el.dataset.widget),
     'share-widget': () => shareWidgetImage(J.widgetUrl),

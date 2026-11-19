@@ -459,8 +459,8 @@ input:not([type="checkbox"]):not([type="radio"]),textarea{border:0;}
 .recap-quote{font-family:var(--serif);font-size:17px;line-height:1.5;margin:6px 0 0;color:var(--ink);border-left:2px solid var(--pink-soft);padding-left:14px;}
 .recap-quote cite{display:block;font-family:var(--font);font-style:normal;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin-top:8px;font-weight:600;}
 .recap-close{font-size:13px;color:var(--ink-2);margin-top:16px;line-height:1.55;}
-.week.mini{gap:6px;}
-.week.mini .dot{aspect-ratio:1;border-radius:3px;}
+.week.week-heat{width:100%;max-width:224px;gap:5px;margin:0 auto;}
+.week.week-heat .dot{aspect-ratio:1.4;border-radius:4px;}
 
 /* goals -------------------------------------------------------------- */
 .goals{display:flex;flex-direction:column;gap:9px;}
@@ -1565,7 +1565,7 @@ body.joy-mode .tabs{display:none !important;}
 .joy-score p{font-size:11.5px;color:rgba(255,255,255,.6);max-width:300px;margin:0 auto;}
 .joy-result-list{display:flex;flex-direction:column;gap:9px;margin-bottom:18px;}
 .joy-result-card{background:#FFF8F2;color:#2A1A20;border-radius:18px;padding:13px 14px;position:relative;}
-.joy-result-q{font-family:var(--serif);font-size:15.5px;line-height:1.3;font-weight:500;padding-right:60px;}
+.joy-result-q{font-family:var(--serif);font-size:15.5px;line-height:1.3;font-weight:500;padding-right:96px;}
 .joy-result-answers{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;}
 .joy-result-answers > div{display:flex;align-items:flex-start;gap:7px;min-width:0;}
 .joy-result-answers > div > span{width:24px;height:24px;flex:none;border-radius:50%;display:grid;place-items:center;font-size:11px;background:color-mix(in srgb,var(--tint) 20%,#fff);}
@@ -1636,7 +1636,7 @@ body.joy-mode .tabs{display:none !important;}
 .joy-stage-chat{display:flex;flex-direction:column;height:100dvh;overflow:hidden;padding-bottom:0;background:linear-gradient(165deg,#1E0B14,#4A1024 62%,#6E1B36);}
 .joy-chat-stage{display:flex;flex-direction:column;flex:1;min-height:0;width:100%;max-width:560px;margin:0 auto;}
 .joy-chat-body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:12px 2px 20px;display:flex;flex-direction:column;gap:9px;}
-.joy-chat-empty{text-align:center;color:rgba(255,255,255,.45);padding:38px 22px;}
+.joy-chat-empty{text-align:center;color:rgba(255,255,255,.45);padding:38px 22px;margin:auto 0;}
 .joy-chat-empty span{font-size:28px;display:block;margin-bottom:9px;}
 .joy-chat-empty p{font-size:12px;line-height:1.6;max-width:290px;margin:0 auto;}
 .joy-msg{display:flex;align-items:flex-end;gap:7px;max-width:88%;}
@@ -2078,3 +2078,7 @@ button:focus-visible,a:focus-visible,[role="button"]:focus-visible,[tabindex]:fo
 @media (min-width:900px){
   .cal{max-width:520px;margin:0 auto;}
 }
+
+/* an empty thread still has something to hold */
+.joy-chat-empty .q{font-family:var(--serif);font-size:20px;line-height:1.35;letter-spacing:-.015em;color:rgba(255,255,255,.9);max-width:300px;margin:0 auto 8px;}
+.joy-chat-empty small{display:block;font-size:10.5px;color:rgba(255,255,255,.42);letter-spacing:.02em;}

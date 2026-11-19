@@ -62,7 +62,7 @@ curl -s https://nadersaedraji-code.github.io/na-app/app.js | grep APP_VERSION
 | `server/sync.mjs` | local dev server + sync API (`/api/*`) |
 | `supabase/schema.sql` | live cloud schema (`joy` table + RPCs applied) |
 | `joy.js` | Halal Couple room: daily questions, games, journal, map, keepsakes |
-| `joy-content.js` | original halal content: 120 daily questions, 220 game prompts |
+| `joy-content.js` | original halal content: 120 daily questions, 284 game prompts |
 | `joy-map.js` | offline world map used by the memory map |
 
 CSS pitfall: `.mini` is the small prayer chip (25 × 32 px). The recap heatmap

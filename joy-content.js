@@ -258,6 +258,14 @@ export const WYR = [
   { id: 'wyr30', a: { text: 'A slow breakfast', emoji: '🥐' }, b: { text: 'A late-night dessert', emoji: '🍰' } },
   { id: 'wyr31', a: { text: 'Be the couple who hosts', emoji: '🍽️' }, b: { text: 'Be the couple who wanders', emoji: '🎒' } },
   { id: 'wyr32', a: { text: 'A promise kept quietly', emoji: '🤍' }, b: { text: 'A grand gesture once', emoji: '✨' } },
+  { id: 'wyr33', a: { text: 'A slow morning with no phone', emoji: '🌅' }, b: { text: 'A late night with a good film', emoji: '🌙' } },
+  { id: 'wyr34', a: { text: 'A cat asleep on the windowsill', emoji: '🐈' }, b: { text: 'A dog waiting at the door', emoji: '🐕' } },
+  { id: 'wyr35', a: { text: 'Know the ending of every book', emoji: '📖' }, b: { text: 'Never know what happens next', emoji: '🎲' } },
+  { id: 'wyr36', a: { text: 'A picnic by a river', emoji: '🧺' }, b: { text: 'A dinner on a rooftop', emoji: '🌆' } },
+  { id: 'wyr37', a: { text: 'Visit the Prophet’s ﷺ city', emoji: '🕌' }, b: { text: 'Visit the city of your ancestors', emoji: '🌍' } },
+  { id: 'wyr38', a: { text: 'A life of small, quiet routines', emoji: '🕯️' }, b: { text: 'A life of big, unexpected turns', emoji: '🧭' } },
+  { id: 'wyr39', a: { text: 'A handmade scrapbook of us', emoji: '✂️' }, b: { text: 'A folder of perfect photos', emoji: '📸' } },
+  { id: 'wyr40', a: { text: 'Say “I’m sorry” first', emoji: '🤍' }, b: { text: 'Be understood without explaining', emoji: '🫂' } },
 ];
 
 /* ------------------------------------------------------------
@@ -296,6 +304,14 @@ export const WML = [
   { id: 'wml30', prompt: 'says “one more episode”' },
   { id: 'wml31', prompt: 'remembers the small details' },
   { id: 'wml32', prompt: 'makes the other laugh at the worst moment' },
+  { id: 'wml33', prompt: 'suggests a picnic at the last minute' },
+  { id: 'wml34', prompt: 'remembers to water the plants' },
+  { id: 'wml35', prompt: 'gets emotional at a good du’a' },
+  { id: 'wml36', prompt: 'wants to stop for every cat' },
+  { id: 'wml37', prompt: 'makes the playlist' },
+  { id: 'wml38', prompt: 'keeps the receipts' },
+  { id: 'wml39', prompt: 'says “we should do this more often”' },
+  { id: 'wml40', prompt: 'falls asleep first' },
 ];
 
 /* ------------------------------------------------------------
@@ -330,6 +346,14 @@ export const NHIE = [
   { id: 'nhie26', prompt: 'hidden a snack from someone' },
   { id: 'nhie27', prompt: 'saved a voice note because it was sweet' },
   { id: 'nhie28', prompt: 'made du’a for someone without telling them' },
+  { id: 'nhie29', prompt: 'prayed for something I never told anyone' },
+  { id: 'nhie30', prompt: 'laughed at the wrong moment' },
+  { id: 'nhie31', prompt: 'kept a note someone wrote me' },
+  { id: 'nhie32', prompt: 'pretended to like a gift' },
+  { id: 'nhie33', prompt: 'had a full conversation with a pet' },
+  { id: 'nhie34', prompt: 'danced in the kitchen alone' },
+  { id: 'nhie35', prompt: 'watched the same comfort film twice in one week' },
+  { id: 'nhie36', prompt: 'made a list just to cross things off' },
 ];
 
 /* ------------------------------------------------------------
@@ -368,6 +392,14 @@ export const THIS_OR_THAT = [
   { id: 'tot30', a: { text: 'Picnic', emoji: '🧺' }, b: { text: 'Candlelit dinner', emoji: '🕯️' } },
   { id: 'tot31', a: { text: 'Handwritten note', emoji: '✉️' }, b: { text: 'Surprise gift', emoji: '🎁' } },
   { id: 'tot32', a: { text: 'Rainy day indoors', emoji: '🌧️' }, b: { text: 'Sunny day out', emoji: '☀️' } },
+  { id: 'tot33', a: { text: 'Morning tea', emoji: '🌅' }, b: { text: 'Evening tea', emoji: '🌙' } },
+  { id: 'tot34', a: { text: 'Window open', emoji: '🪟' }, b: { text: 'Window closed', emoji: '🛋️' } },
+  { id: 'tot35', a: { text: 'A soft blanket', emoji: '🪶' }, b: { text: 'A heavy blanket', emoji: '🧶' } },
+  { id: 'tot36', a: { text: 'A long shower', emoji: '🚿' }, b: { text: 'A long bath', emoji: '🛁' } },
+  { id: 'tot37', a: { text: 'Fresh bread', emoji: '🥖' }, b: { text: 'Fresh fruit', emoji: '🍑' } },
+  { id: 'tot38', a: { text: 'A bookshop', emoji: '📚' }, b: { text: 'A market', emoji: '🧺' } },
+  { id: 'tot39', a: { text: 'A plan with a map', emoji: '🗺️' }, b: { text: 'A plan with no map', emoji: '🎒' } },
+  { id: 'tot40', a: { text: 'A night in', emoji: '🕯️' }, b: { text: 'A night out', emoji: '🌃' } },
 ];
 
 /* ------------------------------------------------------------
@@ -402,6 +434,14 @@ export const DEEP = [
   { id: 'deep26', prompt: 'What is one thing you want to change about how we disagree?', emoji: '🫱🏽‍🫲🏼' },
   { id: 'deep27', prompt: 'What does a beautiful ordinary day look like to you?', emoji: '☕' },
   { id: 'deep28', prompt: 'What is one thing you want us to protect, no matter what?', emoji: '🏡' },
+  { id: 'deep29', prompt: 'When do you feel closest to Allah?', emoji: '🤲' },
+  { id: 'deep30', prompt: 'What is one thing you want to be gentler about?', emoji: '🌿' },
+  { id: 'deep31', prompt: 'What does “enough” look like to you?', emoji: '🕯️' },
+  { id: 'deep32', prompt: 'What is one thing you are carrying alone?', emoji: '🪨' },
+  { id: 'deep33', prompt: 'How do you know when you need rest?', emoji: '🌙' },
+  { id: 'deep34', prompt: 'What is one prayer you want us to memorize together?', emoji: '📖' },
+  { id: 'deep35', prompt: 'What makes you feel respected in a disagreement?', emoji: '🫱🏽‍🫲🏼' },
+  { id: 'deep36', prompt: 'What is one small joy you want to protect in our home?', emoji: '🏡' },
 ];
 
 /* ------------------------------------------------------------
@@ -432,6 +472,14 @@ export const QUIZ = [
   { id: 'quiz22', prompt: 'The small thing I notice most is…', options: ['A clean kitchen', 'Fresh flowers', 'A full fridge', 'Soft lighting'] },
   { id: 'quiz23', prompt: 'A beautiful life, to me, is…', options: ['Peace at home', 'Adventure', 'Purpose', 'Family near'] },
   { id: 'quiz24', prompt: 'I want us to be the couple who…', options: ['Hosts everyone', 'Travels lightly', 'Builds quietly', 'Laughs often'] },
+  { id: 'quiz25', prompt: 'The chore I mind least is…', options: ['Cooking', 'Washing up', 'Laundry', 'Tidying'] },
+  { id: 'quiz26', prompt: 'I feel loved when you…', options: ['Check on me', 'Remember details', 'Make time', 'Make du’a for me'] },
+  { id: 'quiz27', prompt: 'My ideal quiet evening includes…', options: ['Tea and a book', 'A film', 'A walk', 'A long talk'] },
+  { id: 'quiz28', prompt: 'A home should sound like…', options: ['Laughter', 'Quiet', 'Qur’an', 'Family voices'] },
+  { id: 'quiz29', prompt: 'When I need courage, I…', options: ['Make du’a', 'Call you', 'Make a plan', 'Take a walk'] },
+  { id: 'quiz30', prompt: 'My favourite kind of surprise is…', options: ['A small gift', 'A planned date', 'A kind note', 'A day with no plans'] },
+  { id: 'quiz31', prompt: 'I want our old age to be…', options: ['Full of guests', 'Quiet and green', 'Near family', 'Still travelling'] },
+  { id: 'quiz32', prompt: 'The best compliment I can receive is…', options: ['You make me feel safe', 'You are kind', 'I admire your patience', 'I love being around you'] },
 ];
 
 /* ------------------------------------------------------------
@@ -466,6 +514,14 @@ export const TRUTH_DARE = [
   { id: 'td26', type: 'dare', prompt: 'Plan a date from memory — somewhere we have never been.', emoji: '🗺️' },
   { id: 'td27', type: 'truth', prompt: 'What do you want our old age to look like?', emoji: '🌳' },
   { id: 'td28', type: 'dare', prompt: 'Say “I choose you” and mean it.', emoji: '💞' },
+  { id: 'td29', type: 'truth', prompt: 'What is one thing you want us to forgive each other for, again?', emoji: '🕊️' },
+  { id: 'td30', type: 'dare', prompt: 'Send me a photo of something that reminds you of me.', emoji: '📸' },
+  { id: 'td31', type: 'truth', prompt: 'When did you last feel proud of yourself?', emoji: '🌱' },
+  { id: 'td32', type: 'dare', prompt: 'Read me a favourite line from a book or a verse.', emoji: '📖' },
+  { id: 'td33', type: 'truth', prompt: 'What is one way you are growing?', emoji: '🌿' },
+  { id: 'td34', type: 'dare', prompt: 'Give me a five-second hug and say nothing.', emoji: '🫂' },
+  { id: 'td35', type: 'truth', prompt: 'What is one small thing I do that comforts you?', emoji: '🤍' },
+  { id: 'td36', type: 'dare', prompt: 'Write a three-word letter to our future.', emoji: '✉️' },
 ];
 
 /* ------------------------------------------------------------
@@ -488,6 +544,14 @@ export const PHOTO_PROMPTS = [
   { id: 'ph14', prompt: 'Something small you are grateful for', emoji: '🤲' },
   { id: 'ph15', prompt: 'A place you want to take me', emoji: '🗺️' },
   { id: 'ph16', prompt: 'A photo that feels like a du’a', emoji: '🤍' },
+  { id: 'ph17', prompt: 'A walk that felt like a conversation', emoji: '🚶' },
+  { id: 'ph18', prompt: 'A corner of your day', emoji: '🪑' },
+  { id: 'ph19', prompt: 'Something that smells like comfort', emoji: '🫖' },
+  { id: 'ph20', prompt: 'A colour that feels like us', emoji: '🎨' },
+  { id: 'ph21', prompt: 'A place where you feel small in a good way', emoji: '🌌' },
+  { id: 'ph22', prompt: 'Something you kept from our first months', emoji: '📦' },
+  { id: 'ph23', prompt: 'A portrait of peace', emoji: '🕊️' },
+  { id: 'ph24', prompt: 'A photo taken just for me', emoji: '💌' },
 ];
 
 export const GAME_DECKS = {

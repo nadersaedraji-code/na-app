@@ -12,13 +12,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '3.8.3';
+const APP_VERSION = '3.9.0';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '3.9.0', at: '19 Nov 2026', notes: 'Sixty-four more game prompts for the two of you, and the last small labels that were hiding in the dark.' },
   { v: '3.8.3', at: '19 Nov 2026', notes: 'The weekly recap fits together, the daily chat opens with the question, and long result prompts never hide under a label.' },
   { v: '3.8.2', at: '19 Nov 2026', notes: 'Thirty more questions for the quiet days, a clearer month, and Dhuhr that reads D.' },
   { v: '3.8.1', at: '19 Nov 2026', notes: 'Rounds remember where you were, the years say their names, and small gold text reads clearly.' },

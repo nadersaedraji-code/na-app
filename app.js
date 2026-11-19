@@ -12,13 +12,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '3.7.0';
+const APP_VERSION = '3.7.1';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '3.7.1', at: '19 Nov 2026', notes: 'A kinder first run: back, a picker that shows more, and honest disabled buttons.' },
   { v: '3.7.0', at: '19 Nov 2026', notes: 'Home opens with the day; the mosque is gold; the plan shows its middle state.' },
   { v: '3.6.2', at: '19 Nov 2026', notes: 'Counting now begins on 19 November.' },
   { v: '3.6.1', at: '17 Nov 2026', notes: 'Counting now begins on 18 November.' },
@@ -577,6 +578,7 @@ function renderOnboarding() {
       </section>
 
       <section class="step" data-step="2">
+        <button class="ob-back" data-act="ob-step" data-step="1" aria-label="Back">‹</button>
         <h2>Pick your light</h2>
         <p class="lede">A colour that's yours across the app — your column, your ring, your line.</p>
         <div class="swatches" style="justify-content:center;margin-bottom:22px">
@@ -595,11 +597,12 @@ function renderOnboarding() {
       </section>
 
       <section class="step" data-step="3">
+        <button class="ob-back" data-act="ob-step" data-step="2" aria-label="Back">‹</button>
         <h2>And the<br>other half?</h2>
         <p class="lede">Their name — so the app knows who it's cheering for. You can invite them properly later.</p>
         <input class="big" id="ob-partner" placeholder="Their name" maxlength="18" enterkeyhint="done">
         <div class="actions">
-          <button class="btn primary wide" data-act="ob-finish">Enter</button>
+          <button class="btn primary wide" data-act="ob-finish" id="ob-enter-btn" disabled>Enter</button>
           <button class="btn ghost wide" data-act="ob-finish" data-solo="1">Just me for now</button>
         </div>
       </section>
@@ -613,8 +616,13 @@ function renderOnboarding() {
   nameInput?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && ob.name) showObStep(2);
   });
-  $('#ob-partner')?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') completeOnboarding(false);
+  const partnerInput = $('#ob-partner');
+  const enterBtn = $('#ob-enter-btn');
+  partnerInput?.addEventListener('input', () => {
+    if (enterBtn) enterBtn.disabled = !partnerInput.value.trim();
+  });
+  partnerInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && partnerInput.value.trim()) completeOnboarding(false);
   });
   setTimeout(() => nameInput?.focus(), 260);
 }
@@ -627,6 +635,8 @@ function showObStep(n) {
   document.querySelectorAll('#ob-dots i').forEach((d, i) => d.classList.toggle('on', i === n - 1));
   const last = document.querySelector(`.onboard .step[data-step="${n}"] h2`);
   last?.animate?.([{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }], { duration: 380, easing: 'cubic-bezier(.22,1,.36,1)' });
+  if (n === 1) setTimeout(() => $('#ob-name')?.focus(), 60);
+  if (n === 3) setTimeout(() => $('#ob-partner')?.focus(), 60);
 }
 
 async function completeOnboarding(solo) {

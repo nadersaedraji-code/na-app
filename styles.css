@@ -2045,3 +2045,21 @@ button:focus-visible,a:focus-visible,[role="button"]:focus-visible,[tabindex]:fo
   mask-image:linear-gradient(180deg,#000 calc(100% - 26px),transparent);
 }
 .onboard .avatars::-webkit-scrollbar{display:none;}
+
+/* the month should read at a glance on a phone, not six tall rows */
+.day{aspect-ratio:1/.86;}
+.cal-note{color:var(--ink-3);}
+
+/* quiet reminders: a small inbox that doesn't shout */
+.quiet-list{display:flex;flex-direction:column;gap:7px;max-height:48vh;overflow-y:auto;padding:1px;}
+.quiet-msg{padding:12px 14px;border-radius:15px;background:var(--card-flat);box-shadow:inset 0 0 0 1px var(--line);}
+.quiet-msg span{display:block;font-family:var(--serif);font-size:16px;line-height:1.45;color:var(--ink);}
+.quiet-msg small{display:block;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin-top:5px;}
+.quiet-empty{text-align:center;padding:28px 18px;color:var(--ink-3);}
+.quiet-empty span{font-size:26px;display:block;margin-bottom:8px;}
+.quiet-empty p{font-size:12px;line-height:1.6;max-width:250px;margin:0 auto;}
+
+/* the compact month must stay inside its card, even on a narrow phone */
+.cal{min-width:0;width:100%;}
+.cal > *{min-width:0;min-height:0;}
+.day{width:100%;min-width:0;}

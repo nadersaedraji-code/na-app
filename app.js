@@ -12,13 +12,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '3.7.2';
+const APP_VERSION = '3.8.0';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '3.8.0', at: '19 Nov 2026', notes: 'The month reads at a glance, quiet reminders wait in Settings, and the app opens offline.' },
   { v: '3.7.2', at: '19 Nov 2026', notes: 'Quiet details: human notification ages, and one gold language for partly done.' },
   { v: '3.7.1', at: '19 Nov 2026', notes: 'A kinder first run: back, a picker that shows more, and honest disabled buttons.' },
   { v: '3.7.0', at: '19 Nov 2026', notes: 'Home opens with the day; the mosque is gold; the plan shows its middle state.' },
@@ -2343,6 +2344,7 @@ function viewUs() {
 
     <div class="section-title">Calendar <span class="link">tap any day</span></div>
     <div class="card card-pad">${cal}</div>
+    <div class="cal-note">Counting from ${parseDay(statsStart()).toLocaleDateString(LOCALE, { day: 'numeric', month: 'long' })} · earlier days are kept, never averaged.</div>
 
     <div class="legend">
       ${S.members.map((m) => `<span><i style="background:${m.color}"></i>${esc(m.name)}'s prayers</span>`).join('')}
@@ -2501,6 +2503,7 @@ function viewSettings() {
       ${p ? row('edit-partner', I.heart, 'Partner', `${esc(p.name)} · joined ${new Date(p.joinedAt).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' })}`) : ''}
       ${row('open-joy', I.heart, 'Halal Couple', 'Questions, games and the days you keep')}
       ${p ? row('nudge', I.bell, 'Send a notification', 'Arrives as the app speaking — no name attached') : ''}
+      ${p ? row('reminders', I.bell, 'Quiet reminders', 'Messages you have received, kept here') : ''}
       ${row('sync', I.link, sync.isOn() ? 'Two phones connected' : 'Connect the other phone', syncLine())}
       ${p ? row('preview', I.eye, isPreview() ? 'Exit partner view' : 'Preview as ' + esc(p.name), 'See the app from their side') : ''}
     </div>
@@ -2638,6 +2641,32 @@ async function sendNudge(message = '') {
   await db.put('reactions', rec);
   haptic(14);
   toast('Sent — quietly');
+}
+
+function sheetReminders() {
+  const who = me();
+  const received = S.reactions
+    .filter((r) => r.targetType === 'ping' && r.targetId === who?.id && r.emoji)
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+    .slice(0, 24);
+  const when = (ts) => {
+    const d = new Date(ts || Date.now());
+    const day = dayKey(d);
+    const today = dayKey();
+    const yesterday = dayKey(addDays(new Date(), -1));
+    const label = day === today ? 'Today' : day === yesterday ? 'Yesterday' : d.toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' });
+    return `${label} · ${d.toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' })}`;
+  };
+  openSheet(`
+    <div class="grip"></div>
+    <h3>Quiet reminders</h3>
+    <p class="sheet-sub">Messages the app has carried between you — no names, no noise.</p>
+    <div class="quiet-list">
+      ${received.length ? received.map((r) => `<div class="quiet-msg"><span>${esc((r.emoji || '').slice(0, 140))}</span><small>${when(r.createdAt)}</small></div>`).join('') : `<div class="quiet-empty"><span>✉️</span><p>No reminders yet. The next one will wait here.</p></div>`}
+    </div>
+    <button class="btn primary wide" data-act="send-ping" style="margin-top:14px">${I.bell} Send one back</button>
+    <button class="sheet-opt cancel" data-act="close" style="margin-top:8px">Close</button>
+  `);
 }
 
 function sheetPing() {
@@ -3402,6 +3431,7 @@ const ACTIONS = {
 
   nudge: () => sheetPing(),
   'send-ping': () => sheetPing(),
+  reminders: () => sheetReminders(),
 
   'ping-phrase': (el) => {
     const sheet = document.querySelector('.sheet');

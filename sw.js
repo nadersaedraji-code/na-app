@@ -5,7 +5,7 @@
    User data lives in IndexedDB and is never touched here.
    ============================================================ */
 
-const VERSION = '3.7.2';
+const VERSION = '3.8.0';
 const CACHE = `na-shell-${VERSION}`;
 
 const ASSETS = [
@@ -17,12 +17,16 @@ const ASSETS = [
   './joy-content.js',
   './joy-map.js',
   './db.js',
+  './sync.js',
+  './config.js',
   './prayertimes.js',
+  './cluj-times.js',
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-maskable-512.png',
   './icons/apple-touch-icon.png',
+  './icons/notify-hero.png',
 ];
 
 self.addEventListener('install', (event) => {

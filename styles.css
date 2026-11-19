@@ -785,7 +785,7 @@ input[type="range"]::-moz-range-thumb{width:24px;height:24px;border:0;border-rad
   transition:all .2s var(--ease);
 }
 .day .n{font-size:11px;font-weight:600;color:var(--ink-2);line-height:1;}
-.day.other{opacity:.28;}
+.day.other{opacity:.5;}
 .day.today{background:color-mix(in srgb, var(--pink) 14%, transparent);box-shadow:inset 0 0 0 1.5px color-mix(in srgb, var(--pink) 55%, transparent);}
 .day.today .n{color:var(--ink);}
 .day .marks{margin-top:auto;display:flex;flex-direction:column;gap:2.5px;width:78%;}
@@ -1409,7 +1409,8 @@ body.joy-mode .tabs{display:none !important;}
 .joy-level-bar{height:5px;border-radius:99px;background:var(--joy-soft);overflow:hidden;margin-top:13px;}
 .joy-level-bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--joy-gold),var(--joy-rose));}
 .joy-milestones{display:flex;flex-direction:column;gap:2px;margin-top:11px;}
-.joy-milestone{display:flex;align-items:center;gap:9px;padding:8px 9px;border-radius:12px;opacity:.42;}
+.joy-milestone{display:flex;align-items:center;gap:9px;padding:8px 9px;border-radius:12px;opacity:.58;}
+.joy-milestone:not(.earned) > span{filter:grayscale(.55);}
 .joy-milestone.earned{opacity:1;background:color-mix(in srgb,var(--joy-gold-soft) 32%,transparent);}
 .joy-milestone > span{font-size:18px;}
 .joy-milestone > div{flex:1;min-width:0;}
@@ -2072,3 +2073,8 @@ button:focus-visible,a:focus-visible,[role="button"]:focus-visible,[tabindex]:fo
 
 /* a session preview may wrap once, but never push the row */
 .joy-session-copy b{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.3;}
+
+/* the month stays intimate on a wide screen */
+@media (min-width:900px){
+  .cal{max-width:520px;margin:0 auto;}
+}

@@ -12,13 +12,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '3.8.1';
+const APP_VERSION = '3.8.2';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '3.8.2', at: '19 Nov 2026', notes: 'Thirty more questions for the quiet days, a clearer month, and Dhuhr that reads D.' },
   { v: '3.8.1', at: '19 Nov 2026', notes: 'Rounds remember where you were, the years say their names, and small gold text reads clearly.' },
   { v: '3.8.0', at: '19 Nov 2026', notes: 'The month reads at a glance, quiet reminders wait in Settings, and the app opens offline.' },
   { v: '3.7.2', at: '19 Nov 2026', notes: 'Quiet details: human notification ages, and one gold language for partly done.' },
@@ -79,7 +80,7 @@ const RELEASES = [
 
 const PMETA = {
   fajr: { name: 'Fajr', ar: 'الفجر', abbr: 'F' },
-  dhuhr: { name: 'Dhuhr', ar: 'الظهر', abbr: 'Z' },
+  dhuhr: { name: 'Dhuhr', ar: 'الظهر', abbr: 'D' },
   asr: { name: 'Asr', ar: 'العصر', abbr: 'A' },
   maghrib: { name: 'Maghrib', ar: 'المغرب', abbr: 'M' },
   isha: { name: 'Isha', ar: 'العشاء', abbr: 'I' },

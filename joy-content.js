@@ -64,7 +64,7 @@ export const GAME_META = {
 };
 
 /* ------------------------------------------------------------
-   Daily questions — nine per category, rotating one category
+   Daily questions — twelve per category, rotating one category
    per day, then one step deeper into each category.
    ------------------------------------------------------------ */
 export const DAILY_BY_CAT = {
@@ -78,6 +78,9 @@ export const DAILY_BY_CAT = {
     { id: 'd007', type: 'choice', prompt: 'Which promise matters most to you in a marriage?', options: ['Honesty', 'Patience', 'Loyalty', 'Tenderness'] },
     { id: 'd008', type: 'text', prompt: 'What is one way we have grown since we met?' },
     { id: 'd009', type: 'choice', prompt: 'What would you love more of this month?', options: ['Adventures', 'Quiet evenings', 'Deep talks', 'Playfulness'] },
+    { id: 'd091', type: 'text', prompt: 'What is one way I can make your day lighter this week?' },
+    { id: 'd092', type: 'choice', prompt: 'When you are overwhelmed, what helps most?', options: ['Quiet company', 'A listening ear', 'A practical hand', 'A little space'] },
+    { id: 'd093', type: 'text', prompt: 'What do you think we are getting better at, slowly?' },
   ],
   deen: [
     { id: 'd010', type: 'choice', prompt: 'Which part of the day feels most spiritual to you?', options: ['Fajr', 'After Asr', 'Maghrib', 'The quiet before sleep'] },
@@ -89,6 +92,9 @@ export const DAILY_BY_CAT = {
     { id: 'd016', type: 'choice', prompt: 'How do you like to be reminded of something good?', options: ['Gently, with love', 'With a verse', 'With a story', 'With a practical plan'] },
     { id: 'd017', type: 'text', prompt: 'What does a peaceful Islamic home look like to you?' },
     { id: 'd018', type: 'choice', prompt: 'Which name of Allah comforts you most?', options: ['Ar-Rahman', 'Al-Wadud', 'As-Samee’', 'Al-Lateef'] },
+    { id: 'd094', type: 'text', prompt: 'What is one habit of the heart you want to strengthen this year?' },
+    { id: 'd095', type: 'choice', prompt: 'What helps you reconnect when your iman feels low?', options: ['A quiet du’a', 'A long sujood', 'A walk in nature', 'A conversation about Allah'] },
+    { id: 'd096', type: 'text', prompt: 'How can I support your prayer life without ever nagging you?' },
   ],
   home: [
     { id: 'd019', type: 'text', prompt: 'What corner of our home feels most like us?' },
@@ -100,6 +106,9 @@ export const DAILY_BY_CAT = {
     { id: 'd025', type: 'text', prompt: 'What is one thing in our home you want to change together?' },
     { id: 'd026', type: 'choice', prompt: 'What would make our mornings gentler?', options: ['An earlier night', 'Prepared breakfast', 'A shared du’a', 'No phones for ten minutes'] },
     { id: 'd027', type: 'text', prompt: 'Describe your favourite ordinary evening with me.' },
+    { id: 'd097', type: 'choice', prompt: 'What should our home always smell like?', options: ['Fresh coffee', 'Clean linen', 'Something baking', 'Rain through an open window'] },
+    { id: 'd098', type: 'text', prompt: 'What is one little ritual you want us to do every night before sleep?' },
+    { id: 'd099', type: 'choice', prompt: 'What makes a guest feel welcome in our home?', options: ['A warm greeting', 'Something to eat', 'A comfortable corner', 'Being truly listened to'] },
   ],
   family: [
     { id: 'd028', type: 'text', prompt: 'What did your family teach you about love that you want to keep?' },
@@ -111,6 +120,9 @@ export const DAILY_BY_CAT = {
     { id: 'd034', type: 'text', prompt: 'What is one boundary you think would protect our little family?' },
     { id: 'd035', type: 'choice', prompt: 'What is your favourite way to show respect to elders?', options: ['Listening', 'Visiting', 'Helping', 'Remembering them in du’a'] },
     { id: 'd036', type: 'text', prompt: 'What do you hope our family table feels like?' },
+    { id: 'd100', type: 'text', prompt: 'What is one thing you want to thank your parents for?' },
+    { id: 'd101', type: 'choice', prompt: 'How do you want us to spend Eid this year?', options: ['With both families', 'Quietly, just us', 'Visiting the ones who are alone', 'A little of each'] },
+    { id: 'd102', type: 'text', prompt: 'When our families disagree with us, what do you need from me most?' },
   ],
   childhood: [
     { id: 'd037', type: 'text', prompt: 'What is your happiest childhood memory?' },
@@ -122,6 +134,9 @@ export const DAILY_BY_CAT = {
     { id: 'd043', type: 'text', prompt: 'Which place from your childhood would you love to show me?' },
     { id: 'd044', type: 'choice', prompt: 'What made you feel safe as a child?', options: ['A parent’s voice', 'A routine', 'A favourite blanket', 'Knowing you were wanted'] },
     { id: 'd045', type: 'text', prompt: 'What is a small childhood joy you still carry?' },
+    { id: 'd103', type: 'choice', prompt: 'What did you want to be when you were small?', options: ['A doctor', 'A teacher', 'An explorer', 'Something else entirely'] },
+    { id: 'd104', type: 'text', prompt: 'What song or sound takes you straight back to being a child?' },
+    { id: 'd105', type: 'choice', prompt: 'What did your childhood teach you about patience?', options: ['To wait quietly', 'To ask for help', 'To try again', 'To let things go'] },
   ],
   dreams: [
     { id: 'd046', type: 'text', prompt: 'What is one dream you have not said out loud yet?' },
@@ -133,6 +148,9 @@ export const DAILY_BY_CAT = {
     { id: 'd052', type: 'text', prompt: 'What does a good life look like when you strip away what others expect?' },
     { id: 'd053', type: 'choice', prompt: 'How do you like to be supported in a big dream?', options: ['Believe in me', 'Make a plan', 'Give me space', 'Cheer loudly'] },
     { id: 'd054', type: 'text', prompt: 'What is one thing you hope we do before we grow old?' },
+    { id: 'd106', type: 'text', prompt: 'What would a fulfilling year look like, not a busy one?' },
+    { id: 'd107', type: 'choice', prompt: 'What would you like to hand to the future together?', options: ['A home full of warmth', 'A skill we built', 'A family tradition', 'A story worth telling'] },
+    { id: 'd108', type: 'text', prompt: 'What is one fear you would like us to face side by side?' },
   ],
   travel: [
     { id: 'd055', type: 'choice', prompt: 'What kind of journey sounds most like us?', options: ['A quiet coast', 'A busy city', 'A mountain road', 'A desert sky'] },
@@ -144,6 +162,9 @@ export const DAILY_BY_CAT = {
     { id: 'd061', type: 'choice', prompt: 'Which travel memory do you want us to recreate?', options: ['A sunrise', 'A long walk', 'A shared meal', 'A night under stars'] },
     { id: 'd062', type: 'text', prompt: 'What does travelling with me teach you about us?' },
     { id: 'd063', type: 'choice', prompt: 'What should we always carry on a trip?', options: ['A camera', 'A flask of tea', 'A plan', 'A little patience'] },
+    { id: 'd109', type: 'choice', prompt: 'What would you rather we do on a free afternoon?', options: ['Take the scenic route', 'Find a small café', 'Visit a quiet mosque', 'Wander without a map'] },
+    { id: 'd110', type: 'text', prompt: 'What is one place you want us to return to when we are older?' },
+    { id: 'd111', type: 'choice', prompt: 'What makes a journey memorable to you?', options: ['The people', 'The place', 'The unplanned detour', 'Coming home together'] },
   ],
   food: [
     { id: 'd064', type: 'choice', prompt: 'What is your comfort meal?', options: ['Soup', 'Rice and stew', 'Bread and cheese', 'Something sweet'] },
@@ -155,6 +176,9 @@ export const DAILY_BY_CAT = {
     { id: 'd070', type: 'choice', prompt: 'How do you take your tea?', options: ['Sweet and strong', 'Milk, no sugar', 'Green', 'I’m a coffee person'] },
     { id: 'd071', type: 'text', prompt: 'What is one small food tradition you want to keep in our home?' },
     { id: 'd072', type: 'choice', prompt: 'What would you cook for me to say “I love you”?', options: ['Breakfast', 'A slow dinner', 'Dessert', 'Something from your childhood'] },
+    { id: 'd112', type: 'text', prompt: 'What is a meal you would love to share with me at our own table for years?' },
+    { id: 'd113', type: 'choice', prompt: 'What is your favourite thing to do after dinner?', options: ['Tea and talk', 'A slow walk', 'Something sweet', 'Sit together in silence'] },
+    { id: 'd114', type: 'text', prompt: 'What is one recipe you want us to write down and keep?' },
   ],
   fun: [
     { id: 'd073', type: 'text', prompt: 'What is the silliest thing that made you laugh recently?' },
@@ -166,6 +190,9 @@ export const DAILY_BY_CAT = {
     { id: 'd079', type: 'text', prompt: 'What is the most ridiculous thing you have ever done for love?' },
     { id: 'd080', type: 'choice', prompt: 'What superpower would you waste on something tiny?', options: ['Flying to the kitchen', 'Teleporting to the sofa', 'Talking to cats', 'Never losing socks'] },
     { id: 'd081', type: 'text', prompt: 'What is one thing we should do just because it makes us laugh?' },
+    { id: 'd115', type: 'choice', prompt: 'What is the best kind of rainy day?', options: ['A film under a blanket', 'Cooking something warm', 'A long nap', 'Going out anyway'] },
+    { id: 'd116', type: 'text', prompt: 'What is the most ordinary thing that becomes fun when we do it together?' },
+    { id: 'd117', type: 'choice', prompt: 'What would make you smile right now?', options: ['A ridiculous compliment', 'A song from our early days', 'A surprise snack', 'Being chased around the kitchen'] },
   ],
   memories: [
     { id: 'd082', type: 'text', prompt: 'What is your favourite memory of us?' },
@@ -177,6 +204,9 @@ export const DAILY_BY_CAT = {
     { id: 'd088', type: 'text', prompt: 'What is one memory you hope we make this year?' },
     { id: 'd089', type: 'choice', prompt: 'Which of our photos deserves a frame?', options: ['The laughing one', 'The quiet one', 'The one from a journey', 'One we haven’t taken yet'] },
     { id: 'd090', type: 'text', prompt: 'What do you want us to remember about this season of our life?' },
+    { id: 'd118', type: 'text', prompt: 'What is one way we have changed each other for the better?' },
+    { id: 'd119', type: 'choice', prompt: 'What should we keep doing, no matter how busy life gets?', options: ['Friday walks', 'Nightly du’a', 'One meal together', 'A monthly adventure'] },
+    { id: 'd120', type: 'text', prompt: 'When you think of us today, what image comes first?' },
   ],
 };
 

@@ -60,7 +60,10 @@ curl -s https://nadersaedraji-code.github.io/na-app/app.js | grep APP_VERSION
 | `sync.js` | two-phone sync: queue, pull, push, pairing |
 | `sw.js` | service worker, code-only caching |
 | `server/sync.mjs` | local dev server + sync API (`/api/*`) |
-| `supabase/schema.sql` | cloud schema, not yet deployed |
+| `supabase/schema.sql` | live cloud schema (`joy` table + RPCs applied) |
+| `joy.js` | Halal Couple room: daily questions, games, journal, map, keepsakes |
+| `joy-content.js` | original halal content: 120 daily questions, 220 game prompts |
+| `joy-map.js` | offline world map used by the memory map |
 
 Data lives in IndexedDB (`na-app`), store per entity. Sync is wired and tested
 against the local server; the cloud project was never created.
@@ -71,10 +74,12 @@ against the local server; the cloud project was never created.
   no streaks that shame, no confetti, no chat (they use WhatsApp).
 - **Prayer times**: the mosque's own Mawaqit calendar, not a generic calculation.
   Location preset `cluj`; 2026 table. Falls back to computed times for other years.
-- **Streaks**: a day counts only when all five prayers are *on time*. Today never
-  breaks a streak until the day ends.
-- **Weeks**: seven-day blocks from `settings.startDate` (16 Nov 2026), not calendar
-  weeks. Recap appears after a full block closes.
+- **Streaks**: a day counts only when all five prayers are kept — on time, at the
+  mosque, or excused by a period. Today never breaks a streak until the day ends.
+  Counting starts **19 November 2026** per Nader's explicit choice; a one-time
+  `countingFromMoved` migration sets it and later manual changes are preserved.
+- **Weeks**: seven-day blocks from `settings.startDate` (currently **19 Nov 2026**),
+  not calendar weeks. Recap appears after a full block closes.
 - **Days before the start date** are locked in the calendar — never shown as misses.
 - **Goals**: main vs secondary, progress bars, confirmation at 100%, accomplished
   shelf, editable and deletable with undo.
@@ -105,6 +110,6 @@ against the local server; the cloud project was never created.
 
 ## Open ideas (not built)
 
-Shared "Together" list, qada (make-up prayers) counter, daily question for two,
-"on this day" memories, gratitude lines, mosque/jamaa toggle, shared goals,
-per-prayer push once the cloud is on.
+Shared "Together" list, qada (make-up prayers) counter, "on this day" memories,
+gratitude lines, shared goals, per-prayer push once a push service is added.
+Halal Couple is built and live (Today, Play, Journal, Us, Keepsakes).

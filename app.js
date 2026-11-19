@@ -12,13 +12,14 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '3.7.1';
+const APP_VERSION = '3.7.2';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '3.7.2', at: '19 Nov 2026', notes: 'Quiet details: human notification ages, and one gold language for partly done.' },
   { v: '3.7.1', at: '19 Nov 2026', notes: 'A kinder first run: back, a picker that shows more, and honest disabled buttons.' },
   { v: '3.7.0', at: '19 Nov 2026', notes: 'Home opens with the day; the mosque is gold; the plan shows its middle state.' },
   { v: '3.6.2', at: '19 Nov 2026', notes: 'Counting now begins on 19 November.' },
@@ -2918,7 +2919,7 @@ function sheetItem(id) {
         </form>
         ${['todo', 'partial', 'done'].map((st) => `
           <button class="sheet-opt" data-act="set-task-state" data-id="${t.id}" data-state="${st}" ${taskState(t) === st ? 'data-active="true"' : ''}>
-            <span class="sw" style="background:${st === 'done' ? 'var(--ok)' : st === 'partial' ? 'var(--late)' : 'var(--pending)'}"></span>
+            <span class="sw" style="background:${st === 'done' ? 'var(--ok)' : st === 'partial' ? 'var(--gold)' : 'var(--pending)'}"></span>
             <span class="lbl">${st === 'todo' ? 'Not done' : st === 'partial' ? 'Partly done' : 'Done'}</span>
             ${taskState(t) === st ? '✓' : ''}
           </button>`).join('')}
@@ -3163,8 +3164,10 @@ function sheetPrayerNotifs() {
 
   let last = null;
   try { last = JSON.parse(localStorage.getItem('na:lastNotif') || 'null'); } catch { /* ignore */ }
+  const minutesAgo = last?.at ? Math.max(1, Math.round((Date.now() - last.at) / 60000)) : null;
+  const ago = minutesAgo == null ? 'earlier' : minutesAgo < 60 ? `${minutesAgo} min ago` : minutesAgo < 1440 ? `${Math.round(minutesAgo / 60)} h ago` : `${Math.round(minutesAgo / 1440)} d ago`;
   const lastLine = last
-    ? `${last.result === 'sent' ? 'Delivered' : last.result === 'blocked' ? 'Shown in the app' : 'Could not show'} · ${Math.max(1, Math.round((Date.now() - last.at) / 60000))} min ago`
+    ? `${last.result === 'sent' ? 'Delivered' : last.result === 'blocked' ? 'Shown in the app' : 'Could not show'} · ${ago}`
     : 'Nothing sent yet';
   const stateText = perm === 'granted'
     ? 'Notifications allowed'

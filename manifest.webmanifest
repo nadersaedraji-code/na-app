@@ -1,7 +1,7 @@
 {
   "name": "N&A",
   "short_name": "N&A",
-  "description": "A quiet space for two — prayers, plans and the shape of your days.",
+  "description": "A quiet space for two — prayers and a daily review.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

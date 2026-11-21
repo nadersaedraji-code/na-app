@@ -7,18 +7,18 @@
 import * as db from './db.js';
 import * as sync from './sync.js';
 import { BACKEND } from './config.js';
-import { createJoy } from './joy.js';
 import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '3.9.1';
+const APP_VERSION = '4.0.0';
 const LOCALE = 'en-GB';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '4.0.0', at: '22 Nov 2026', notes: "Two clear places: prayer and daily satisfaction and productivity scores." },
   { v: '3.9.1', at: '19 Nov 2026', notes: 'A blank notification can no longer leave your phone, and one day finally reads like one day.' },
   { v: '3.9.0', at: '19 Nov 2026', notes: 'Sixty-four more game prompts for the two of you, and the last small labels that were hiding in the dark.' },
   { v: '3.8.3', at: '19 Nov 2026', notes: 'The weekly recap fits together, the daily chat opens with the question, and long result prompts never hide under a label.' },
@@ -244,11 +244,10 @@ const S = {
   goals: [],
   cycles: [],
   nudges: [],
-  joy: [],
   settings: { ...DEFAULTS },
   viewerId: null,
   viewingAs: null,
-  view: 'home',
+  view: 'prayer',
   planTab: 'mine',
   goalTab: 'mine',
   calMonth: null,
@@ -498,7 +497,6 @@ async function loadState() {
   S.goals = d.goals || [];
   S.cycles = d.cycles || [];
   S.nudges = d.nudges || [];
-  S.joy = d.joy || [];
   S.settings = { ...DEFAULTS, ...(S.meta.settings?.value || {}) };
   S.settings.notif = { ...DEFAULTS.notif, ...(S.settings.notif || {}) };
   S.viewerId = d.meta?.app?.viewerId || S.members[0]?.id || null;
@@ -560,8 +558,6 @@ function showApp() {
 const ob = { step: 1, name: '', color: PALETTE[0], avatar: AVATARS[0], partner: '' };
 
 function renderOnboarding() {
-  document.querySelectorAll('body > .joy-dock').forEach((el) => el.remove());
-  document.body.classList.remove('joy-mode');
   const root = $('#onboarding');
   root.hidden = false;
   $('#app').hidden = true;
@@ -679,7 +675,8 @@ async function completeOnboarding(solo) {
     ...loc,
     preset: loc.preset || null,
     notif: { ...DEFAULTS.notif },
-    startDate: dayKey(addDays(new Date(), 1)),
+    startDate: '2026-11-19',
+    countingFromMoved: '2026-11-19',
   };
   await db.put('meta', { key: 'settings', value: firstSettings });
   await db.saveMeta('app', { viewerId: meId, schemaVersion: db.SCHEMA_VERSION });
@@ -833,12 +830,9 @@ const I = {
   check: icon('<path d="M20 6 9 17l-5-5"/>'),
 };
 
-const TABS = [  { id: 'home', label: 'Home', icon: '<path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4.4v-6H9.4v6H5a1 1 0 0 1-1-1Z"/>' },
+const TABS = [
   { id: 'prayer', label: 'Prayer', icon: '<path d="M21 12.8A8.6 8.6 0 1 1 11.2 3a6.8 6.8 0 0 0 9.8 9.8Z"/>' },
-  { id: 'plan', label: 'Plan', icon: '<path d="M9 6h11M9 12h11M9 18h11"/><path d="M4.5 6h.01M4.5 12h.01M4.5 18h.01"/>' },
-  { id: 'goals', label: 'Goals', icon: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.6"/>' },
   { id: 'review', label: 'Review', icon: '<path d="M12 20h9"/><path d="M16.6 3.4a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>' },
-  { id: 'us', label: 'Us', icon: '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 1 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/>' },
 ];
 
 function renderTabs() {
@@ -890,10 +884,6 @@ window.addEventListener('resize', positionTabPill);
 function render() {
   if (!S.members.length) return;
   const scr = $('#screen');
-  const isJoy = S.view === 'joy';
-  document.body.classList.toggle('joy-mode', isJoy);
-  const tabbar = $('#tabs');
-  if (tabbar) tabbar.hidden = isJoy;
   const banner = isPreview()
     ? `<div style="display:flex;justify-content:center;padding:6px 0 2px"><button class="preview-bar" data-act="exit-preview">Previewing as ${esc(actor()?.name)} · tap to exit</button></div>`
     : '';
@@ -901,11 +891,6 @@ function render() {
   scr.style.setProperty('--dir', String(S.dir || 0));
   document.documentElement.style.setProperty('--accent', actor()?.color || '#8AA7FF');
   scr.innerHTML = banner + `<div class="view${S.animateNext ? '' : ' calm'}${S.suppressAnim ? ' no-anim' : ''}">${VIEWS[S.view]()}</div>`;
-  // A fixed dock must live outside the transformed view, or it anchors to
-  // the animated page instead of the phone. Move it to the body.
-  document.querySelectorAll('body > .joy-dock').forEach((el) => el.remove());
-  const movedDock = scr.querySelector('.joy-dock');
-  if (movedDock) document.body.appendChild(movedDock);
   S.animateNext = false;
   renderTabs();
 }
@@ -930,212 +915,6 @@ function go(view) {
   S.animateNext = true;
   render();
   window.scrollTo(0, S.scroll[view] || 0);
-}
-
-/* ============================================================
-   Weekly recap — 7-day blocks counted from the start date
-   ============================================================ */
-function weekInfo(index) {
-  const from = addDays(parseDay(statsStart()), index * 7);
-  const to = addDays(from, 6);
-  return { index, from, to, fromKey: dayKey(from), toKey: dayKey(to) };
-}
-
-/** The most recent fully finished week, or null if none yet. */
-function completedWeek() {
-  const start = parseDay(statsStart());
-  const today = parseDay(dayKey());
-  const days = Math.floor((today - start) / 86400000);
-  if (days < 7) return null;
-  const index = Math.floor(days / 7) - 1;
-  return index >= 0 ? weekInfo(index) : null;
-}
-
-function weekDays(w) {
-  const out = [];
-  for (let d = new Date(w.from); d <= w.to; d = addDays(d, 1)) out.push(dayKey(d));
-  return out;
-}
-
-const weekRangeLabel = (w) =>
-  `${w.from.toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' })} – ${w.to.toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' })}`;
-
-function weekStats(w) {
-  const days = weekDays(w);
-  const isDone = (t) => taskState(t) === 'done';
-
-  const per = S.members.map((m) => {
-    let ontime = 0, late = 0, missed = 0, tasksDone = 0, tasksTotal = 0, perfect = 0, excused = 0;
-    let prod = 0, prodN = 0, hap = 0, hapN = 0;
-    const wins = [];
-
-    for (const day of days) {
-      const excusedHere = isExcused(m.id, day);
-      if (excusedHere) excused++;
-      else {
-        for (const k of PRAYER_ORDER) {
-          const st = getPrayer(m.id, day, k)?.status;
-          if (st === 'ontime') ontime++;
-          else if (st === 'late') late++;
-          else if (st === 'missed') missed++;
-        }
-        if (PRAYER_ORDER.every((k) => {
-          const r = getPrayer(m.id, day, k);
-          return r && (r.status === 'ontime' || r.mosque === true);
-        })) perfect++;
-      }
-      for (const t of planFor(m.id, day)) {
-        tasksTotal++;
-        if (isDone(t)) tasksDone++;
-      }
-      const rv = reviewFor(m.id, day);
-      if (rv) {
-        if (Number.isFinite(rv.productivity)) { prod += rv.productivity; prodN++; }
-        if (Number.isFinite(rv.happiness)) { hap += rv.happiness; hapN++; }
-        if (rv.wins) wins.push({ day, text: rv.wins });
-      }
-    }
-
-    return {
-      member: m, ontime, late, missed, kept: ontime + late,
-      tasksDone, tasksTotal, perfect, excused,
-      prod: prodN ? prod / prodN : null,
-      hap: hapN ? hap / hapN : null,
-      wins,
-    };
-  });
-
-  let bestDay = null;
-  for (const day of days) {
-    let score = 0;
-    let any = false;
-    for (const m of S.members) {
-      const rv = reviewFor(m.id, day);
-      if (!rv) continue;
-      any = true;
-      score += (rv.productivity ?? 0) + (rv.happiness ?? 0);
-    }
-    if (any && (!bestDay || score > bestDay.score)) bestDay = { day, score };
-  }
-
-  const reactions = S.reactions.filter((r) => days.includes(r.day)).length;
-  const goalsDone = S.goals.filter((g) => g.completedAt && days.includes(dayKey(new Date(g.completedAt)))).length;
-  const quote = per
-    .flatMap((p) => p.wins.map((wn) => ({ ...wn, member: p.member })))
-    .sort((a, b) => b.text.length - a.text.length)[0] || null;
-
-  return { days, per, bestDay, reactions, goalsDone, quote };
-}
-
-function weekNarrative(s) {
-  const pct = (p) => Math.round((p.kept / 35) * 100);
-  const avg = s.per.length === 2 ? (pct(s.per[0]) + pct(s.per[1])) / 2 : pct(s.per[0]);
-  const moods = s.per.map((p) => p.hap).filter((v) => v != null);
-  const mood = moods.length ? moods.reduce((a, b) => a + b, 0) / moods.length : null;
-  const tasksDone = s.per.reduce((n, p) => n + p.tasksDone, 0);
-  const tasksTotal = s.per.reduce((n, p) => n + p.tasksTotal, 0);
-
-  let title = 'A week, recorded';
-  if (avg >= 99.5) title = 'Every prayer kept';
-  else if (avg >= 90) title = 'Nearly every prayer kept';
-  else if (avg >= 72) title = 'A steady week';
-  else if (avg >= 45) title = 'A half-lit week';
-  else if (avg > 0) title = 'A softer week';
-
-  const bits = [];
-  if (s.per.length === 2) {
-    const a = s.per[0].kept;
-    const b = s.per[1].kept;
-    if (a === 35 && b === 35) bits.push('Every prayer kept, both of you.');
-    else if (a === b) bits.push(`${a} prayers kept each, out of 35.`);
-    else bits.push(`${a} and ${b} prayers kept out of 35.`);
-  } else {
-    bits.push(`${s.per[0].kept} prayers kept out of 35.`);
-  }
-  if (tasksTotal) bits.push(`${tasksDone} of ${tasksTotal} tasks done.`);
-  if (mood != null) bits.push(`Mood averaged ${mood.toFixed(1)}/10.`);
-
-  return { title, line: bits.join(' ') };
-}
-
-function weekMini(memberId, days) {
-  return `<div class="week week-heat">${days.map((day) => {
-    const d = parseDay(day);
-    const dots = PRAYER_ORDER.map((k) => `<i class="dot ${getPrayer(memberId, day, k)?.status || ''}"></i>`).join('');
-    return `<div class="col"><span class="dow">${d.toLocaleDateString(LOCALE, { weekday: 'narrow' })}</span>${dots}</div>`;
-  }).join('')}</div>`;
-}
-
-function recapBanner() {
-  const w = completedWeek();
-  if (!w) return '';
-  if (S.meta.recap?.dismissedWeek === w.index) return '';
-  return `
-    <div class="recap-banner">
-      <button class="rb-main" data-act="open-recap" data-week="${w.index}">
-        <span class="rb-ico">✦</span>
-        <span class="rb-body">
-          <span class="rb-k">Week ${w.index + 1} is complete</span>
-          <span class="rb-d">${weekRangeLabel(w)} · your recap is ready</span>
-        </span>
-      </button>
-      <button class="rb-x" data-act="dismiss-recap" data-week="${w.index}" aria-label="Dismiss">✕</button>
-    </div>`;
-}
-
-function sheetRecap(index) {
-  const w = weekInfo(index);
-  const s = weekStats(w);
-  const n = weekNarrative(s);
-  const pct = (p) => Math.round((p.kept / 35) * 100);
-
-  const best = s.bestDay
-    ? parseDay(s.bestDay.day).toLocaleDateString(LOCALE, { weekday: 'long' })
-    : '—';
-
-  const closing = s.reactions
-    ? `You encouraged each other ${s.reactions} time${s.reactions === 1 ? '' : 's'} this week.`
-    : 'No reactions this week — one small emoji goes a long way.';
-
-  openSheet(`
-    <div class="grip"></div>
-    <div class="recap">
-      <div class="recap-kicker">Week ${index + 1} · ${weekRangeLabel(w)}</div>
-      <h3 class="recap-title">${n.title}</h3>
-      <p class="recap-line">${n.line}</p>
-
-      ${s.per.map((p) => `
-        <div class="recap-person">
-          <div class="recap-head">
-            <span class="av">${p.member.avatar}</span>
-            <span class="nm">${esc(p.member.name)}</span>
-            <span class="pc num">${pct(p)}%</span>
-          </div>
-          ${weekMini(p.member.id, s.days)}
-          <div class="recap-nums">
-            <span><b class="num">${p.ontime}</b> on time</span>
-            <span><b class="num">${p.late}</b> late</span>
-            <span><b class="num">${p.missed}</b> missed</span>
-            <span><b class="num">${p.perfect}</b> perfect</span>
-            ${p.excused ? `<span><b class="num">${p.excused}</b> excused</span>` : ''}
-            <span><b class="num">${p.tasksDone}/${p.tasksTotal}</b> tasks</span>
-            ${p.prod != null ? `<span><b class="num">${p.prod.toFixed(1)}</b> focus</span>` : ''}
-            ${p.hap != null ? `<span><b class="num">${p.hap.toFixed(1)}</b> mood</span>` : ''}
-          </div>
-        </div>`).join('')}
-
-      <div class="recap-extras">
-        <div><span class="k">Best day</span><span class="v">${best}</span></div>
-        <div><span class="k">Encouragements</span><span class="v num">${s.reactions}</span></div>
-        <div><span class="k">Goals reached</span><span class="v num">${s.goalsDone}</span></div>
-      </div>
-
-      ${s.quote ? `<blockquote class="recap-quote">“${esc(s.quote.text)}”<cite>${esc(s.quote.member.name)} · ${parseDay(s.quote.day).toLocaleDateString(LOCALE, { weekday: 'long' })}</cite></blockquote>` : ''}
-
-      <p class="recap-close">${closing}</p>
-      <button class="btn primary wide" style="margin-top:16px" data-act="close">Done</button>
-    </div>
-  `);
 }
 
 /** A day counts when all five are kept: on time, at the mosque, or period. */
@@ -1204,49 +983,6 @@ function streakOf(memberId) {
 
 const flameSvg = (size = 16) =>
   `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c2.9 3.3 5 5.7 5 8.6a5 5 0 0 1-10 0C7 8.7 9.1 6.3 12 3Z"/><path d="M12 12.4c1 .9 1.6 1.8 1.6 2.7a1.6 1.6 0 1 1-3.2 0c0-.9.6-1.8 1.6-2.7Z"/></svg>`;
-
-function streakCard() {
-  const who = actor();
-  const s = streakOf(who.id);
-  const perfect = perfectDays(who.id);
-  const start = statsStart();
-
-  const week = [];
-  for (let i = 6; i >= 0; i--) {
-    const d = addDays(new Date(), -i);
-    const k = dayKey(d);
-    week.push({
-      k,
-      letter: d.toLocaleDateString(LOCALE, { weekday: 'narrow' }),
-      on: perfect.has(k),
-      today: i === 0,
-      before: k < start,
-      excused: i === 0 && s.excusedToday,
-    });
-  }
-
-  return `
-    <section class="streak-card ${s.current ? '' : 'cold'}">
-      <div class="streak-top">
-        <div class="streak-figure">
-          <span class="streak-flame">${flameSvg(20)}</span>
-          <span class="streak-n num">${s.current}</span>
-        </div>
-        <div class="streak-text">
-          <div class="streak-k">day streak</div>
-          <div class="streak-d">${s.current ? 'Every prayer kept' : 'Fill all five to start it'}</div>
-        </div>
-        ${s.best > s.current ? `<div class="streak-best"><span>best</span><b class="num">${s.best}</b></div>` : ''}
-      </div>
-      <div class="streak-week">
-        ${week.map((d) => `
-          <div class="sw">
-            <span class="l">${d.letter}</span>
-            <i class="${d.on ? 'on' : d.excused ? 'excused' : d.today && !d.before ? 'today' : ''}" ${d.before ? 'style="opacity:.35"' : ''}></i>
-          </div>`).join('')}
-      </div>
-    </section>`;
-}
 
 /* ============================================================
    Qibla — the bearing to the Kaaba, and a live compass
@@ -1536,108 +1272,6 @@ function dayArc(who) {
 }
 
 /* ============================================================
-   View — Home
-   ============================================================ */
-function viewHome() {
-  const who = actor();
-  if (!who) return '';
-  const p = other(who);
-  const today = dayKey();
-  const t = times(today);
-  const np = nextPrayer(t);
-  const dateLine = new Date().toLocaleDateString(LOCALE, { weekday: 'long', day: 'numeric', month: 'long' });
-
-  const side = (m, isMe) => {
-    const count = prayerCount(m.id, today);
-    const plan = planFor(m.id, today);
-    const done = plan.filter(isDone).length;
-    const review = reviewFor(m.id, today);
-    const dots = PRAYER_ORDER.map((k) => {
-      const r = getPrayer(m.id, today, k);
-      return `<i class="${r?.status || ''}"></i>`;
-    }).join('');
-    return `
-      <div class="duo-side" style="--tint:${m.color}">
-        <div class="duo-top"><span class="av">${m.avatar}</span><span class="nm">${isMe ? 'You' : esc(m.name)}</span></div>
-        <div class="score"><b class="num">${count}</b><span class="num">/5</span></div>
-        <div class="duo-dots">${dots}</div>
-        <div class="duo-sub">${plan.length ? `${done} of ${plan.length} done` : 'Nothing planned'}${review ? ` · ${review.productivity}/10` : ''}</div>
-      </div>`;
-  };
-
-  const partnerSide = p
-    ? side(p, false)
-    : `<div class="duo-side" style="--tint:var(--a)">
-        <div class="duo-top"><span class="av">＋</span><span class="nm">Their side</span></div>
-        <div class="pending-name">Connect the second phone and their day appears here.</div>
-      </div>`;
-
-  const myPlan = planFor(who.id, today);
-  const myDone = myPlan.filter(isDone).length;
-  const myReview = reviewFor(who.id, today);
-  const theirsReview = p ? reviewFor(p.id, today) : null;
-
-  return `
-    <header class="home-head">
-      <div class="mark"><i></i><i></i><span>N &amp; A</span></div>
-      <div class="home-actions">
-        <button class="icon-btn" data-act="send-ping" aria-label="Send a notification">
-          ${I.bell}
-        </button>
-        <button class="icon-btn" data-act="open-settings" aria-label="Settings">
-          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M4 7h5M13 7h7M4 17h9M17 17h3"/><circle cx="11" cy="7" r="2"/><circle cx="15" cy="17" r="2"/>
-          </svg>
-        </button>
-      </div>
-    </header>
-
-    <div class="hello">
-      <div class="eyebrow">${dateLine}</div>
-      <h1>${greeting()}, ${esc(who.name)}</h1>
-    </div>
-
-    ${dayArc(who)}
-
-    ${verseCard()}
-
-    ${recapBanner()}
-
-    <section class="duo card">
-      ${side(who, true)}
-      ${partnerSide}
-    </section>
-
-    ${streakCard()}
-
-    <button class="joy-entry" data-act="open-joy">
-      <span class="joy-entry-glow" aria-hidden="true"></span>
-      <span class="joy-entry-kicker"><i>✦</i> Halal Couple</span>
-      <span class="joy-entry-title">A little world<br>for the two of you.</span>
-      <span class="joy-entry-sub">Questions, games, memories, and the ordinary days.</span>
-      <span class="joy-entry-foot"><b>Enter</b><span>→</span></span>
-      <span class="joy-entry-art" aria-hidden="true"><i>💞</i><i>🕌</i><i>📸</i></span>
-    </button>
-
-    <div class="tiles">
-      <button class="tile" data-act="tab" data-view="plan">
-        <span class="go">›</span>
-        <div class="k">Plan</div>
-        <div class="v num">${myDone}<small> / ${myPlan.length}</small></div>
-        <div class="d">${myPlan.length - myDone > 0 ? `${myPlan.length - myDone} left today` : 'All clear'}</div>
-      </button>
-      <button class="tile" data-act="tab" data-view="review">
-        <span class="go">›</span>
-        <div class="k">Review</div>
-        <div class="v num">${myReview ? `${myReview.productivity}<small> · </small>${myReview.happiness}` : '—'}</div>
-        <div class="d">${myReview ? 'Today is kept' : theirsReview ? `${esc(p.name)} logged theirs` : 'Close the day tonight'}</div>
-      </button>
-    </div>
-
-    <p class="quiet">A quiet place for two · v${APP_VERSION}</p>
-  `;
-}
-/* ============================================================
    Prayer reminders — per prayer, with an urgent warning
    ============================================================ */
 const NOTIF_KEY = 'na:notified';
@@ -1871,7 +1505,7 @@ function viewPrayer() {
         <div class="eyebrow">${new Date().toLocaleDateString(LOCALE, { weekday: 'long', day: 'numeric', month: 'long' })}</div>
         <h1>${greeting()},<br>${esc(who.name)}</h1>
       </div>
-      <div class="head-avatar" style="box-shadow:0 0 0 3px ${who.color}30">${who.avatar}</div>
+       <button class="head-avatar" data-act="open-settings" aria-label="Settings" style="box-shadow:0 0 0 3px ${who.color}30">${who.avatar}</button>
     </header>
 
     ${soon ? `<button class="urgent" data-act="log" data-key="${soon.k}">
@@ -1925,179 +1559,6 @@ function lastSeven(memberId) {
 }
 
 /* ============================================================
-   View — Plan
-   ============================================================ */
-function viewPlan() {
-  const who = actor();
-  const p = other(who);
-  const today = dayKey();
-  const partnerExists = !!p;
-  const shownMember = S.planTab === 'theirs' && partnerExists ? p : who;
-  const editable = shownMember.id === who.id;
-  const tasks = planFor(shownMember.id, today);
-  const yesterday = dayKey(addDays(new Date(), -1));
-  const carry = editable ? planFor(shownMember.id, yesterday).filter((t) => !isDone(t)) : [];
-
-  const list = tasks.length
-    ? `<div class="tasks stagger">${tasks.map((t) => taskRow(t, editable)).join('')}</div>`
-    : `<div class="empty"><b>${editable ? 'A clear page' : 'Nothing yet'}</b>${
-        editable ? 'Add the one thing that would make today feel like a win.' : `${esc(shownMember.name)} hasn't written anything for today.`
-      }</div>`;
-
-  return `
-    <header class="head">
-      <div>
-        <div class="eyebrow">Today · ${parseDay(today).toLocaleDateString(LOCALE, { day: 'numeric', month: 'long' })}</div>
-        <h1>The plan</h1>
-        <div class="sub">${tasks.filter(isDone).length} of ${tasks.length} done</div>
-      </div>
-    </header>
-
-    <div class="seg" role="tablist">
-      <button role="tab" aria-selected="${S.planTab === 'mine'}" data-act="plan-tab" data-tab="mine">Mine</button>
-      <button role="tab" aria-selected="${S.planTab === 'theirs'}" data-act="plan-tab" data-tab="theirs" ${partnerExists ? '' : 'disabled'}>
-        ${partnerExists ? esc(p.name) : 'Partner'}
-      </button>
-    </div>
-
-    ${carry.length ? `<button class="chip" data-act="carry" style="margin-bottom:12px">↩ Pull in ${carry.length} unfinished from yesterday</button>` : ''}
-
-    ${list}
-
-    ${editable ? `
-      <form class="add-task" data-form="add-task">
-        <input name="title" placeholder="Add something to today…" maxlength="120" autocomplete="off">
-        <input class="time" type="time" name="time" aria-label="Optional time" title="Optional time">
-        <button type="submit" aria-label="Add task">+</button>
-      </form>` : ''}
-
-    ${partnerExists && !editable ? `<p style="font-size:12.5px;color:var(--ink-3);margin-top:14px;line-height:1.6">You can cheer ${esc(p.name)} on — tap the heart on any item.</p>` : ''}
-  `;
-}
-
-const isDone = (t) => taskState(t) === 'done';
-const taskState = (t) => t.progress || (t.done ? 'done' : 'todo');
-
-function taskRow(t, editable) {
-  const react = reactionFor(actor().id, 'plan', t.id);
-  const st = taskState(t);
-  const nextLabel = st === 'todo' ? 'Partly done' : st === 'partial' ? 'Done' : 'Not done';
-  return `
-    <div class="task ${st === 'done' ? 'done' : st === 'partial' ? 'partial' : ''}" data-id="${t.id}">
-      <button class="check ${st}" data-act="toggle-task" data-id="${t.id}" aria-label="${nextLabel}">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
-      </button>
-      <div class="body">
-        <div class="title">${esc(t.title)}</div>
-        ${t.timeLabel || t.priority === 'important' || st === 'partial' ? `<div class="meta">
-          ${st === 'partial' ? '<span class="badge-partial">Partly</span>' : ''}
-          ${t.timeLabel ? `<span class="badge-time num">${esc(t.timeLabel)}</span>` : ''}
-          ${t.priority === 'important' ? '<span class="prio"></span><span>important</span>' : ''}
-        </div>` : ''}
-        ${react ? `<div class="react-chip">Your ${react.emoji}</div>` : ''}
-      </div>
-      ${editable
-        ? `<button class="icon-btn" data-act="task-menu" data-id="${t.id}" aria-label="More actions">⋯</button>`
-        : `<button class="icon-btn" data-act="react-plan" data-id="${t.id}" aria-label="React">♥</button>`}
-    </div>`;
-}
-
-/* ============================================================
-   View — Goals
-   ============================================================ */
-const goalsFor = (memberId) =>
-  S.goals.filter((g) => g.memberId === memberId).sort((a, b) => a.createdAt - b.createdAt);
-
-async function saveGoal(g) {
-  const i = S.goals.findIndex((x) => x.id === g.id);
-  if (i >= 0) S.goals[i] = g;
-  else S.goals.push(g);
-  await db.put('goals', g);
-  return g;
-}
-
-function goalCard(g, editable) {
-  const pct = Math.max(0, Math.min(100, Math.round(g.progress || 0)));
-  return `
-    <div class="goal">
-      <div class="goal-top">
-        <span class="goal-title">${esc(g.title)}</span>
-        <span class="goal-pct num">${pct}%</span>
-        ${editable ? `<button class="icon-btn goal-menu" data-act="goal-menu" data-id="${g.id}" aria-label="Edit or delete">⋯</button>` : ''}
-      </div>
-      ${editable
-        ? `<input class="goal-bar" type="range" min="0" max="100" step="5" value="${pct}" data-goal="${g.id}" style="--p:${pct}" aria-label="${esc(g.title)} progress">`
-        : `<div class="goal-track"><i style="width:${pct}%;background:var(--accent)"></i></div>`}
-    </div>`;
-}
-
-function goalSection(title, hint, list, scope, editable) {
-  return `
-    <div class="section-title">${title} <span class="link">${list.length}</span></div>
-    <div class="goals">
-      ${list.length
-        ? list.map((g) => goalCard(g, editable)).join('')
-        : `<div class="empty small"><b>Nothing yet</b>${hint}</div>`}
-    </div>
-    ${editable
-      ? `<form class="add-goal" data-form="add-goal" data-scope="${scope}">
-          <input name="title" placeholder="${scope === 'main' ? 'Add a main objective…' : 'Add a secondary one…'}" maxlength="90" autocomplete="off">
-          <button type="submit" aria-label="Add objective">+</button>
-        </form>`
-      : ''}
-  `;
-}
-
-function goalDoneSection(done, editable) {
-  return `
-    <div class="section-title">Accomplished <span class="link">${done.length}</span></div>
-    <div class="goals">
-      ${done.length
-        ? done.map((g) => `
-          <div class="goal done">
-            <span class="goal-tick">✓</span>
-            <div class="goal-done-body">
-              <div class="goal-title">${esc(g.title)}</div>
-              <div class="goal-meta">${g.scope === 'main' ? 'Main' : 'Secondary'} · ${new Date(g.completedAt).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' })}</div>
-            </div>
-            ${editable ? `<button class="icon-btn" data-act="goal-menu" data-id="${g.id}" aria-label="Edit or delete">⋯</button>` : ''}
-          </div>`).join('')
-        : `<div class="empty small"><b>An empty shelf</b>Objectives you reach will rest here.</div>`}
-    </div>
-  `;
-}
-
-function viewGoals() {
-  const who = actor();
-  const p = other(who);
-  const shown = S.goalTab === 'theirs' && p ? p : who;
-  const editable = shown.id === who.id;
-  const list = goalsFor(shown.id);
-  const main = list.filter((g) => !g.completedAt && g.scope === 'main');
-  const secondary = list.filter((g) => !g.completedAt && g.scope === 'secondary');
-  const done = list.filter((g) => g.completedAt).sort((a, b) => b.completedAt - a.completedAt);
-
-  return `
-    <header class="head">
-      <div>
-        <div class="eyebrow">The long game</div>
-        <h1>Objectives</h1>
-        <div class="sub">${done.length ? `${done.length} accomplished` : 'One bar at a time.'}</div>
-      </div>
-    </header>
-
-    ${p ? `<div class="seg" role="tablist">
-      <button role="tab" aria-selected="${S.goalTab !== 'theirs'}" data-act="goal-tab" data-tab="mine">Mine</button>
-      <button role="tab" aria-selected="${S.goalTab === 'theirs'}" data-act="goal-tab" data-tab="theirs">${esc(p.name)}</button>
-    </div>` : ''}
-
-    ${goalSection('Main objectives', 'The ones that matter most.', main, 'main', editable)}
-    ${goalSection('Secondary objectives', 'Nice to have — not owed to anyone.', secondary, 'secondary', editable)}
-    ${goalDoneSection(done, editable)}
-  `;
-}
-
-/* ============================================================
    View — Review
    ============================================================ */
 function viewReview() {
@@ -2122,8 +1583,8 @@ function viewReview() {
         <span class="you">You</span>
         <span class="them">${esc(p.name)}</span>
       </div>
-      ${metric('Productivity', mine?.productivity, theirs?.productivity)}
-      ${metric('Happiness', mine?.happiness, theirs?.happiness)}
+       ${metric('Satisfaction', mine?.happiness, theirs?.happiness)}
+       ${metric('Productivity', mine?.productivity, theirs?.productivity)}
     </div>
     <div style="height:14px"></div>` : '';
 
@@ -2132,42 +1593,27 @@ function viewReview() {
       <div>
         <div class="eyebrow">${parseDay(today).toLocaleDateString(LOCALE, { weekday: 'long', day: 'numeric', month: 'long' })}</div>
         <h1>How was today?</h1>
-        <div class="sub">Two numbers and a sentence. That's enough.</div>
-      </div>
+         <div class="sub">Rate your satisfaction and productivity out of 10.</div>
+       </div>
+       <button class="icon-btn" data-act="open-settings" aria-label="Settings">${I.sliders}</button>
     </header>
 
     ${compare}
 
     <form class="card card-pad" data-form="save-review">
-      <div class="field">
-        <div class="label">What I accomplished</div>
-        <textarea class="area" name="wins" placeholder="One thing counts. Even a small one." maxlength="600">${esc(mine?.wins || '')}</textarea>
-      </div>
+       <div class="field slider">
+         <div class="top"><label class="label" for="satisfaction-score" style="margin:0">Satisfaction</label><div class="big num"><span class="val">${mine?.happiness ?? 5}</span><span>/10</span></div></div>
+         <input id="satisfaction-score" type="range" name="happiness" min="0" max="10" step="1" value="${mine?.happiness ?? 5}" style="--p:${(mine?.happiness ?? 5) * 10}">
+       </div>
 
-      <div class="field slider">
-        <div class="top"><div class="label" style="margin:0">Productivity</div><div class="big num"><span class="val">${mine?.productivity ?? 5}</span><span>/10</span></div></div>
-        <input type="range" name="productivity" min="0" max="10" step="1" value="${mine?.productivity ?? 5}" style="--p:${(mine?.productivity ?? 5) * 10}">
-      </div>
-
-      <div class="field slider">
-        <div class="top"><div class="label" style="margin:0">Happiness</div><div class="big num"><span class="val">${mine?.happiness ?? 5}</span><span>/10</span></div></div>
-        <input type="range" name="happiness" min="0" max="10" step="1" value="${mine?.happiness ?? 5}" style="--p:${(mine?.happiness ?? 5) * 10}">
-      </div>
-
-      <div class="field">
-        <div class="label">One moment worth keeping</div>
-        <input class="line" name="highlight" placeholder="Optional" maxlength="120" value="${esc(mine?.highlight || '')}">
+       <div class="field slider">
+         <div class="top"><label class="label" for="productivity-score" style="margin:0">Productivity</label><div class="big num"><span class="val">${mine?.productivity ?? 5}</span><span>/10</span></div></div>
+         <input id="productivity-score" type="range" name="productivity" min="0" max="10" step="1" value="${mine?.productivity ?? 5}" style="--p:${(mine?.productivity ?? 5) * 10}">
       </div>
 
       <button class="btn primary wide" type="submit">${saved ? 'Update today' : 'Save today'}</button>
       ${saved ? `<div style="text-align:center;font-size:12px;color:var(--ink-3);margin-top:10px">Saved · you can change it until the day ends</div>` : ''}
     </form>
-
-    ${mine?.notes?.length ? mine.notes.map((n) => `
-      <div class="note-from">
-        <span class="av">${esc(memberById(n.from)?.avatar || '💬')}</span>
-        <span>${esc(n.text)}<div style="font-size:11.5px;color:var(--ink-3);margin-top:3px">${esc(memberById(n.from)?.name || '')}</div></span>
-      </div>`).join('') : ''}
 
     ${p ? `
       <div class="section-title">${esc(p.name)}'s day</div>
@@ -2180,287 +1626,13 @@ function viewReview() {
               <div style="font-size:12px;color:var(--ink-3)">${theirs.updatedAt && dayKey(new Date(theirs.updatedAt)) === today ? `logged ${new Date(theirs.updatedAt).toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' })}` : 'logged today'}</div>
             </div>
           </div>
-          ${theirs.wins ? `<div style="font-size:14.5px;line-height:1.6;color:var(--ink-2);margin-bottom:14px">${esc(theirs.wins)}</div>` : ''}
-          <div class="their-scores">
-            <div><span>Productivity</span><b class="num">${theirs.productivity ?? '–'}</b><i>/10</i></div>
-            <div><span>Happiness</span><b class="num">${theirs.happiness ?? '–'}</b><i>/10</i></div>
-          </div>
-          ${theirs.highlight ? `<div style="font-size:13.5px;color:var(--ink-3);margin-top:12px">“${esc(theirs.highlight)}”</div>` : ''}
-          <div style="display:flex;gap:8px;margin-top:16px">
-            <button class="btn soft" data-act="react-review" data-id="${theirs.id}">${I.heart} React</button>
-          </div>
-          ${noteBlock(theirs, who, p)}
-        ` : `<div class="empty" style="border:0;padding:14px"><b>Not written yet</b>${esc(p.name)} hasn't logged today. Give them time.</div>`}
+           <div class="their-scores">
+             <div><span>Satisfaction</span><b class="num">${theirs.happiness ?? '–'}</b><i>/10</i></div>
+             <div><span>Productivity</span><b class="num">${theirs.productivity ?? '–'}</b><i>/10</i></div>
+           </div>
+         ` : `<div class="empty" style="border:0;padding:14px"><b>Not written yet</b>${esc(p.name)} hasn't logged today. Give them time.</div>`}
       </div>` : ''}
   `;
-}
-
-function noteBlock(review, fromMember, toMember) {
-  const existing = (review.notes || []).find((n) => n.from === fromMember.id);
-  if (existing) {
-    return `<div class="note-from">
-      <span class="av">💬</span>
-      <span style="flex:1">${esc(existing.text)}</span>
-      <button class="icon-btn" data-act="delete-note" data-id="${review.id}" aria-label="Delete your note">✕</button>
-    </div>`;
-  }
-  return `
-    <form data-form="add-note" data-review="${review.id}" style="margin-top:14px">
-      <input class="line" name="note" placeholder="Leave ${esc(toMember.name)} a word…" maxlength="140">
-      <button class="btn soft wide" type="submit" style="margin-top:8px">Send</button>
-    </form>`;
-}
-
-function trendPoints(days = 30) {
-  const out = [];
-  const start = statsStart();
-  for (let i = days - 1; i >= 0; i--) {
-    const k = dayKey(addDays(new Date(), -i));
-    if (k < start) continue;
-    let h = 0, hn = 0, p = 0, pn = 0;
-    for (const m of S.members) {
-      const r = reviewFor(m.id, k);
-      if (!r) continue;
-      if (Number.isFinite(r.happiness)) { h += r.happiness; hn++; }
-      if (Number.isFinite(r.productivity)) { p += r.productivity; pn++; }
-    }
-    if (hn || pn) out.push({ k, h: hn ? h / hn : null, p: pn ? p / pn : null });
-  }
-  return out;
-}
-
-function smoothPath(points) {
-  if (!points.length) return '';
-  if (points.length === 1) return `M${points[0][0]},${points[0][1]}`;
-  let d = `M${points[0][0].toFixed(1)},${points[0][1].toFixed(1)}`;
-  for (let i = 0; i < points.length - 1; i++) {
-    const p0 = points[i - 1] || points[i];
-    const p1 = points[i];
-    const p2 = points[i + 1];
-    const p3 = points[i + 2] || p2;
-    const c1x = p1[0] + (p2[0] - p0[0]) / 6;
-    const c1y = p1[1] + (p2[1] - p0[1]) / 6;
-    const c2x = p2[0] - (p3[0] - p1[0]) / 6;
-    const c2y = p2[1] - (p3[1] - p1[1]) / 6;
-    d += ` C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
-  }
-  return d;
-}
-
-function trendCard() {
-  const start = statsStart();
-  const pretty = (k) => parseDay(k).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' });
-
-  if (start > dayKey()) {
-    return `<div class="card card-pad">
-      <div class="empty-note"><b>Counting starts ${pretty(start)}</b>Today still works — it just isn't averaged until tomorrow.</div>
-    </div>`;
-  }
-
-  const pts = trendPoints(30);
-  if (pts.length < 2) {
-    const hasReview = S.reviews.length > 0;
-    return `<div class="card card-pad">
-      <div class="empty-note"><b>${hasReview ? 'Your first line begins tomorrow' : 'The lines begin tonight'}</b>${hasReview ? 'Today is saved. The graph will draw itself from tomorrow.' : "Save a review and tomorrow's graph will have its first point."}</div>
-    </div>`;
-  }
-
-  const W = 340, H = 148, padL = 24, padR = 10, padT = 12, padB = 22;
-  const iw = W - padL - padR, ih = H - padT - padB;
-  const n = pts.length;
-  const x = (i) => padL + (n === 1 ? iw / 2 : (i * iw) / (n - 1));
-  const y = (v) => padT + ih - (v / 10) * ih;
-
-  const series = (key) => pts.map((pt, i) => (pt[key] == null ? null : [x(i), y(pt[key])])).filter(Boolean);
-  const hp = series('h');
-  const pp = series('p');
-
-  const grid = [0, 5, 10].map((v) =>
-    `<line class="grid" x1="${padL}" x2="${W - padR}" y1="${y(v)}" y2="${y(v)}"/>
-     <text class="axis" x="${padL - 7}" y="${y(v) + 3.5}">${v}</text>`).join('');
-
-  const draw = (points, color) => {
-    if (points.length < 2) return '';
-    const d = smoothPath(points);
-    const last = points[points.length - 1];
-    return `<path d="${d} L${last[0].toFixed(1)},${padT + ih} L${points[0][0].toFixed(1)},${padT + ih} Z" fill="${color}" opacity=".09"/>
-      <path d="${d}" fill="none" stroke="${color}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-      <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="3" fill="${color}" stroke="var(--bg-soft)" stroke-width="2"/>`;
-  };
-
-  const avg = (key) => {
-    const v = pts.map((p) => p[key]).filter((v2) => v2 != null);
-    return v.length ? (v.reduce((a, b) => a + b, 0) / v.length).toFixed(1) : '–';
-  };
-
-  return `<div class="card card-pad">
-    <div class="chart-legend">
-      <span><i class="dot h"></i>Happiness <b class="num">${avg('h')}</b></span>
-      <span><i class="dot p"></i>Productivity <b class="num">${avg('p')}</b></span>
-    </div>
-    <svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Happiness and productivity over time">
-      ${grid}
-      ${draw(pp, 'var(--a)')}
-      ${draw(hp, 'var(--pink)')}
-    </svg>
-    <div class="chart-x"><span>${pretty(pts[0].k)}</span><span>${pretty(pts[pts.length - 1].k)}</span></div>
-  </div>`;
-}
-
-/* ============================================================
-   View — Us (calendar + history)
-   ============================================================ */
-function viewUs() {
-  const a = me();
-  const b = S.members.find((m) => m.id !== a?.id) || null;
-  const stats = monthStats(S.calMonth);
-  const cal = calendarHTML(S.calMonth, a, b);
-
-  return `
-    <header class="head">
-      <div>
-        <div class="eyebrow">${S.members.map((m) => esc(m.name)).join(' & ')}</div>
-        <h1>Us</h1>
-        <div class="sub">The shape of your days, side by side.</div>
-      </div>
-      <div class="head-avatar" style="display:flex;gap:2px">${S.members.map((m) => `<span style="font-size:17px">${m.avatar}</span>`).join('')}</div>
-    </header>
-
-    <div class="stats">
-      <div class="stat">
-        <div class="k">Prayers</div>
-        <div class="v num">${stats.prayerPct}<small>%</small></div>
-        <div class="bar" style="color:${a?.color || 'var(--n)'}"><i style="width:${stats.prayerPct}%"></i></div>
-      </div>
-      <div class="stat">
-        <div class="k">Tasks</div>
-        <div class="v num">${stats.taskPct}<small>%</small></div>
-        <div class="bar" style="color:${b?.color || 'var(--a)'}"><i style="width:${stats.taskPct}%"></i></div>
-      </div>
-      <div class="stat">
-        <div class="k">Happiness</div>
-        <div class="v num">${stats.happiness}<small>/10</small></div>
-        <div class="bar" style="color:${a?.color || 'var(--n)'}"><i style="width:${Number(stats.happiness) * 10 || 0}%"></i></div>
-      </div>
-    </div>
-
-    <div class="section-title">Trends <span class="link">last 30 days</span></div>
-    ${trendCard()}
-
-    <div class="section-title">Calendar <span class="link">tap any day</span></div>
-    <div class="card card-pad">${cal}</div>
-    <div class="cal-note">Counting from ${parseDay(statsStart()).toLocaleDateString(LOCALE, { day: 'numeric', month: 'long' })} · earlier days are kept, never averaged.</div>
-
-    <div class="legend">
-      ${S.members.map((m) => `<span><i style="background:${m.color}"></i>${esc(m.name)}'s prayers</span>`).join('')}
-    </div>
-
-    <div class="section-title">This month</div>
-    <div class="card card-pad" style="display:flex;justify-content:space-between;gap:12px">
-      <div>
-        <div class="k" style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);font-weight:650">Productivity</div>
-        <div class="num" style="font-size:26px;font-weight:640;letter-spacing:-.04em;margin-top:4px">${stats.productivity}<span style="font-size:13px;color:var(--ink-3)">/10</span></div>
-      </div>
-      <div style="text-align:right">
-        <div class="k" style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);font-weight:650">Days recorded</div>
-        <div class="num" style="font-size:26px;font-weight:640;letter-spacing:-.04em;margin-top:4px">${stats.days}</div>
-      </div>
-    </div>
-  `;
-}
-
-function monthStats(base) {
-  const y = base.getFullYear();
-  const m = base.getMonth();
-  const lastDay = new Date(y, m + 1, 0).getDate();
-  const today = new Date();
-  const start = statsStart();
-  let pOk = 0, pTot = 0, tDone = 0, tTot = 0, hap = 0, hapN = 0, prod = 0, prodN = 0, days = 0;
-
-  for (let d = 1; d <= lastDay; d++) {
-    const dt = new Date(y, m, d);
-    if (dt > today) break;
-    const day = dayKey(dt);
-    if (day < start) continue;
-    let recorded = false;
-    for (const mem of S.members) {
-      if (!isExcused(mem.id, day)) {
-        for (const k of PRAYER_ORDER) {
-          if (!isDue(day, k)) continue;
-          const r = getPrayer(mem.id, day, k);
-          pTot++;
-          if (prayerCounted(r)) pOk++;
-        }
-      }
-      for (const t of planFor(mem.id, day)) { tTot++; if (isDone(t)) tDone++; }
-      const rv = reviewFor(mem.id, day);
-      if (rv) {
-        recorded = true;
-        if (Number.isFinite(rv.happiness)) { hap += rv.happiness; hapN++; }
-        if (Number.isFinite(rv.productivity)) { prod += rv.productivity; prodN++; }
-      }
-    }
-    if (recorded) days++;
-  }
-
-  return {
-    prayerPct: pTot ? Math.round((pOk / pTot) * 100) : 0,
-    taskPct: tTot ? Math.round((tDone / tTot) * 100) : 0,
-    happiness: hapN ? (hap / hapN).toFixed(1) : '–',
-    productivity: prodN ? (prod / prodN).toFixed(1) : '–',
-    days,
-  };
-}
-
-function calendarHTML(base, a, b) {
-  const y = base.getFullYear();
-  const m = base.getMonth();
-  const first = new Date(y, m, 1);
-  const offset = (first.getDay() + 6) % 7; // Monday first
-  const daysInMonth = new Date(y, m + 1, 0).getDate();
-  const rows = Math.ceil((offset + daysInMonth) / 7);
-  const today = dayKey();
-  const start = statsStart();
-
-  const dows = ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d) => `<span class="dow">${d}</span>`).join('');
-
-  let cells = '';
-  for (let i = 0; i < rows * 7; i++) {
-    const dnum = i - offset + 1;
-    if (dnum < 1 || dnum > daysInMonth) {
-      cells += `<div class="day other" aria-hidden="true"></div>`;
-      continue;
-    }
-    const dt = new Date(y, m, dnum);
-    const k = dayKey(dt);
-    // Nothing before the start date, nothing in the future.
-    const inactive = k < start || dt > new Date();
-    const marks = [a, b].filter(Boolean).map((mem) => {
-      if (isExcused(mem.id, k)) {
-        return `<i class="ex"><b style="width:100%;background:${mem.color}"></b></i>`;
-      }
-      const n = prayerCount(mem.id, k);
-      return `<i><b style="width:${(n / 5) * 100}%;background:${mem.color}"></b></i>`;
-    }).join('');
-    const hasReview = S.members.some((mem) => reviewFor(mem.id, k));
-    cells += `<button class="day ${k === today && !inactive ? 'today' : ''} ${inactive ? 'other' : ''}"
-      data-act="day" data-day="${k}" ${inactive ? 'disabled aria-disabled="true"' : ''}>
-      <span class="n num">${dnum}</span>
-      <span class="marks">${marks}</span>
-      ${hasReview && !inactive ? '<i class="rev"></i>' : ''}
-    </button>`;
-  }
-
-  return `
-    <div class="cal-head">
-      <div class="m">${base.toLocaleDateString(LOCALE, { month: 'long', year: 'numeric' })}</div>
-      <div class="cal-nav">
-        <button data-act="cal-move" data-d="-1" aria-label="Previous month">‹</button>
-        <button data-act="cal-move" data-d="1" aria-label="Next month">›</button>
-      </div>
-    </div>
-    <div class="cal">${dows}${cells}</div>
-    ${start > today ? `<div class="cal-note">Your days begin ${parseDay(start).toLocaleDateString(LOCALE, { day: 'numeric', month: 'long' })}.</div>` : ''}`;
 }
 
 /* ============================================================
@@ -2490,7 +1662,7 @@ function viewSettings() {
   return `
     <header class="head">
       <div>
-        <button class="crumb" data-act="tab" data-view="home">‹ Home</button>
+         <button class="crumb" data-act="tab" data-view="prayer">‹ Prayer</button>
         <h1 style="margin-top:12px">Settings</h1>
         <div class="sub">Version ${APP_VERSION} · ${latest.at}</div>
       </div>
@@ -2506,10 +1678,7 @@ function viewSettings() {
     <div class="settings-label">The two of you</div>
     <div class="group">
       ${p ? row('edit-partner', I.heart, 'Partner', `${esc(p.name)} · joined ${new Date(p.joinedAt).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' })}`) : ''}
-      ${row('open-joy', I.heart, 'Halal Couple', 'Questions, games and the days you keep')}
-      ${p ? row('nudge', I.bell, 'Send a notification', 'Arrives as the app speaking — no name attached') : ''}
-      ${p ? row('reminders', I.bell, 'Quiet reminders', 'Messages you have received, kept here') : ''}
-      ${row('sync', I.link, sync.isOn() ? 'Two phones connected' : 'Connect the other phone', syncLine())}
+       ${row('sync', I.link, sync.isOn() ? 'Two phones connected' : 'Connect the other phone', syncLine())}
       ${p ? row('preview', I.eye, isPreview() ? 'Exit partner view' : 'Preview as ' + esc(p.name), 'See the app from their side') : ''}
     </div>
 
@@ -2609,7 +1778,6 @@ async function onRemoteChange() {
     S.pendingRemote = true;
     await loadState();
     await deliverNudges();
-    try { await joy?.remote?.(); } catch (err) { console.warn('joy notify failed', err); }
     return;
   }
   applyRemoteChange();
@@ -2620,7 +1788,6 @@ async function applyRemoteChange() {
   await loadState();
   await reconcileMembers();
   await deliverNudges();
-  try { await joy?.remote?.(); } catch (err) { console.warn('joy notify failed', err); }
   S.suppressAnim = true;
   refresh();
   S.suppressAnim = false;
@@ -2890,91 +2057,6 @@ function sheetReact(type, targetId) {
       ${emojis.map((e) => `<button data-act="set-react" data-type="${type}" data-target="${targetId}" data-emoji="${e}" data-active="${existing?.emoji === e}">${e}</button>`).join('')}
     </div>
     ${existing ? `<button class="btn ghost wide" style="margin-top:14px" data-act="clear-react" data-type="${type}" data-target="${targetId}">Remove reaction</button>` : ''}
-  `);
-}
-
-function sheetDay(day) {
-  const a = me();
-  const b = other(a);
-
-  const person = (m) => {
-    const rv = reviewFor(m.id, day);
-    const excused = isExcused(m.id, day);
-    return `
-      <div class="person">
-        <div class="person-head">
-          <span class="av">${m.avatar}</span>
-          <span class="nm">${esc(m.name)}</span>
-          <span style="margin-left:auto;font-size:12px;color:var(--ink-3)">${excused ? 'excused' : `${prayerCount(m.id, day)}/5`}</span>
-        </div>
-        ${excused
-          ? '<div class="pills"><span class="pill pending">Excused today</span></div>'
-          : `<div class="pills">
-              ${PRAYER_ORDER.map((k) => {
-                const r = getPrayer(m.id, day, k);
-                const st = r?.status || 'pending';
-                return `<span class="pill ${st}"><span class="dot"></span>${PMETA[k].name}</span>`;
-              }).join('')}
-            </div>`}
-        ${planFor(m.id, day).length ? `<div class="mini-list">${planFor(m.id, day).map((t) => `<div class="${t.done ? 'done' : ''}">${t.done ? '✓' : '·'} ${esc(t.title)}</div>`).join('')}</div>` : ''}
-        ${rv ? `
-          <div class="scores">
-            <span class="chip">Productivity <b style="color:var(--ink)">${rv.productivity ?? '–'}</b></span>
-            <span class="chip">Happiness <b style="color:var(--ink)">${rv.happiness ?? '–'}</b></span>
-          </div>
-          ${rv.wins ? `<span class="day-label">Accomplished</span><div class="review-line">${esc(rv.wins)}</div>` : ''}
-          ${rv.highlight ? `<span class="day-label" style="margin-top:12px">Moment</span><div class="review-line" style="font-style:italic">“${esc(rv.highlight)}”</div>` : ''}
-          ${(rv.notes || []).map((n) => `<div class="note-from" style="margin-top:10px"><span class="av">💬</span><span>${esc(n.text)}</span></div>`).join('')}
-        ` : `<div class="review-line" style="color:var(--ink-3)">No review that day.</div>`}
-      </div>`;
-  };
-
-  openSheet(`
-    <div class="grip"></div>
-    <div class="day-sheet">
-      <h3>${dayLabel(day)}</h3>
-      <p class="sheet-sub">${day === dayKey() ? 'Today' : 'A day you kept'}</p>
-      ${a ? person(a) : ''}
-      ${b ? person(b) : ''}
-      <button class="btn wide" style="margin-top:20px" data-act="close">Close</button>
-    </div>
-  `);
-}
-
-function sheetItem(id) {
-  const t = S.plan.find((x) => x.id === id);
-  if (!t) return;
-  const who = actor();
-  const mine = t.memberId === who.id;
-  const stateLabel = { todo: 'not done', partial: 'partly done', done: 'done' }[taskState(t)];
-  openSheet(`
-    <div class="grip"></div>
-    <h3>${esc(t.title)}</h3>
-    <p class="sheet-sub">${mine ? 'Your task' : 'Their task'} · ${stateLabel}</p>
-    <div class="sheet-list">
-      ${mine ? `
-        <form data-form="rename-task" data-id="${t.id}">
-          <input class="line" name="title" value="${esc(t.title)}" maxlength="120">
-          <div style="display:flex;gap:8px;margin-top:8px">
-            <input class="line" name="time" type="time" value="${esc(t.timeLabel || '')}" style="flex:1">
-            <button class="btn" type="submit">Rename</button>
-          </div>
-        </form>
-        ${['todo', 'partial', 'done'].map((st) => `
-          <button class="sheet-opt" data-act="set-task-state" data-id="${t.id}" data-state="${st}" ${taskState(t) === st ? 'data-active="true"' : ''}>
-            <span class="sw" style="background:${st === 'done' ? 'var(--ok)' : st === 'partial' ? 'var(--gold)' : 'var(--pending)'}"></span>
-            <span class="lbl">${st === 'todo' ? 'Not done' : st === 'partial' ? 'Partly done' : 'Done'}</span>
-            ${taskState(t) === st ? '✓' : ''}
-          </button>`).join('')}
-        <button class="sheet-opt" data-act="prio-task" data-id="${t.id}">
-          <span class="lbl">${t.priority === 'important' ? 'Remove importance' : 'Mark important'}</span>
-        </button>
-        <button class="sheet-opt" data-act="delete-task" data-id="${t.id}" style="color:var(--miss-ink)">
-          <span class="lbl">Delete</span>
-        </button>
-      ` : `<button class="sheet-opt" data-act="react-plan" data-id="${t.id}"><span class="lbl">Send a reaction</span></button>`}
-      <button class="sheet-opt cancel" data-act="close">Close</button>
-    </div>
   `);
 }
 
@@ -3253,61 +2335,13 @@ function sheetPrayerNotifs() {
   `);
 }
 
-function syncLine() {  if (!sync.isOn()) return 'Share prayers and plans live';
+function syncLine() {  if (!sync.isOn()) return 'Share prayers and daily reviews live';
   const s = S.syncState;
   if (s === 'gone') return 'Fresh start — reset this phone';
   if (s === 'error') return 'Offline — will retry';
   if (s === 'syncing') return 'Syncing…';
   if (s === 'live') return 'Synced · just now';
   return 'Connected';
-}
-
-function sheetGoalDone(id) {
-  const g = S.goals.find((x) => x.id === id);
-  if (!g) return;
-  openSheet(`
-    <div class="grip"></div>
-    <h3>${esc(g.title)}</h3>
-    <p class="sheet-sub">The bar is full. Mark it as accomplished?</p>
-    <div class="sheet-list">
-      <button class="sheet-opt" data-act="goal-complete" data-id="${id}" data-active="true">
-        <span class="sw" style="background:var(--ok)"></span>
-        <span class="lbl">Yes — accomplished<span class="sub">It moves to your shelf</span></span>
-      </button>
-      <button class="sheet-opt" data-act="goal-notyet" data-id="${id}">
-        <span class="sw" style="background:var(--late)"></span>
-        <span class="lbl">Not yet<span class="sub">Keep it at 95%</span></span>
-      </button>
-    </div>
-  `);
-}
-
-function sheetGoal(id) {
-  const g = S.goals.find((x) => x.id === id);
-  if (!g) return;
-  const pct = Math.round(g.progress || 0);
-  openSheet(`
-    <div class="grip"></div>
-    <h3>${esc(g.title)}</h3>
-    <p class="sheet-sub">${g.scope === 'main' ? 'Main objective' : 'Secondary objective'}${g.completedAt ? ' · accomplished' : ` · ${pct}%`}</p>
-    <form data-form="edit-goal" data-id="${id}">
-      <input class="line" name="title" value="${esc(g.title)}" maxlength="90">
-      <button class="btn primary wide" type="submit" style="margin-top:10px">Save name</button>
-    </form>
-    <div class="sheet-list" style="margin-top:12px">
-      ${g.completedAt ? `
-        <button class="sheet-opt" data-act="restore-goal" data-id="${id}">
-          <span class="lbl">Put it back on the list</span>
-        </button>` : `
-        <button class="sheet-opt" data-act="goal-scope" data-id="${id}">
-          <span class="lbl">${g.scope === 'main' ? 'Move to secondary' : 'Make it a main objective'}</span>
-        </button>`}
-      <button class="sheet-opt" data-act="delete-goal" data-id="${id}" style="color:var(--miss-ink)">
-        <span class="lbl">Delete</span>
-      </button>
-      <button class="sheet-opt cancel" data-act="close">Close</button>
-    </div>
-  `, (sheet) => sheet.querySelector('input')?.focus());
 }
 
 function sheetConfirm(title, body, label, action) {  openSheet(`
@@ -3324,24 +2358,14 @@ function sheetConfirm(title, body, label, action) {  openSheet(`
 /* ============================================================
    Actions
    ============================================================ */
-/* The little world is created after the helpers, before boot. */
-let joy = null;
-
 const VIEWS = {
-  home: viewHome,
   prayer: viewPrayer,
-  plan: viewPlan,
-  goals: viewGoals,
   review: viewReview,
-  us: viewUs,
   settings: viewSettings,
-  joy: () => (joy ? joy.view() : ''),
 };
 
 const ACTIONS = {
   tab: (el) => go(el.dataset.view),
-  joy: (el) => joy?.action(el.dataset.joyAct, el),
-  'open-joy': () => go('joy'),
   close: () => closeSheet(),
   'open-settings': () => go('settings'),
 
@@ -3403,8 +2427,6 @@ const ACTIONS = {
     if (!el.dataset.id) return toast('Nothing to cheer yet');
     sheetReact('prayer', el.dataset.id);
   },
-  'react-plan': (el) => sheetReact('plan', el.dataset.id),
-  'react-review': (el) => sheetReact('review', el.dataset.id),
 
   'set-react': async (el) => {
     const who = actor();
@@ -3426,20 +2448,6 @@ const ACTIONS = {
     closeSheet();
     refresh();
   },
-
-  day: (el) => sheetDay(el.dataset.day),
-
-  'cal-move': (el) => {
-    const d = Number(el.dataset.d);
-    S.calMonth = new Date(S.calMonth.getFullYear(), S.calMonth.getMonth() + d, 1);
-    refresh();
-  },
-
-  'plan-tab': (el) => { S.planTab = el.dataset.tab; refresh(); },
-
-  'goal-tab': (el) => { S.goalTab = el.dataset.tab; refresh(); },
-
-  'goal-menu': (el) => sheetGoal(el.dataset.id),
 
   qibla: () => sheetQibla(),
 
@@ -3528,150 +2536,6 @@ const ACTIONS = {
     } catch {
       toast('Compass unavailable on this device');
     }
-  },
-
-  'open-recap': (el) => sheetRecap(Number(el.dataset.week)),
-
-  'dismiss-recap': async (el) => {
-    const wk = Number(el.dataset.week);
-    await db.put('meta', { key: 'recap', dismissedWeek: wk });
-    S.meta.recap = { key: 'recap', dismissedWeek: wk };
-    refresh();
-  },
-
-  'goal-scope': async (el) => {
-    const g = S.goals.find((x) => x.id === el.dataset.id);
-    if (!g) return;
-    g.scope = g.scope === 'main' ? 'secondary' : 'main';
-    await saveGoal(g);
-    closeSheet();
-    refresh();
-    toast(g.scope === 'main' ? 'Moved to main objectives' : 'Moved to secondary');
-  },
-
-  'delete-note': async (el) => {
-    const rec = S.reviews.find((r) => r.id === el.dataset.id);
-    const who = actor();
-    if (!rec) return;
-    rec.notes = (rec.notes || []).filter((n) => n.from !== who.id);
-    rec.updatedAt = Date.now();
-    await saveReview(rec);
-    refresh();
-    toast('Note removed');
-  },
-
-  'delete-goal': async (el) => {    const id = el.dataset.id;
-    const g = S.goals.find((x) => x.id === id);
-    if (!g) return;
-    S.goals = S.goals.filter((x) => x.id !== id);
-    await db.del('goals', id);
-    closeSheet();
-    refresh();
-    haptic(16);
-    toast('Objective deleted', 6000, 'Undo', async () => {
-      S.goals.push(g);
-      await db.put('goals', g);
-      refresh();
-    });
-  },
-
-  'goal-complete': async (el) => {
-    const g = S.goals.find((x) => x.id === el.dataset.id);
-    if (!g) return;
-    g.progress = 100;
-    g.completedAt = Date.now();
-    await saveGoal(g);
-    haptic(16);
-    closeSheet();
-    refresh();
-    toast('Accomplished');
-  },
-
-  'goal-notyet': async (el) => {
-    const g = S.goals.find((x) => x.id === el.dataset.id);
-    if (!g) return;
-    g.progress = 95;
-    await saveGoal(g);
-    closeSheet();
-    refresh();
-  },
-
-  'restore-goal': async (el) => {
-    const g = S.goals.find((x) => x.id === el.dataset.id);
-    if (!g) return;
-    g.completedAt = null;
-    g.progress = 90;
-    await saveGoal(g);
-    closeSheet();
-    refresh();
-    toast('Back on the list');
-  },
-
-  'toggle-task': async (el) => {
-    const t = S.plan.find((x) => x.id === el.dataset.id);
-    if (!t) return;
-    const order = ['todo', 'partial', 'done'];
-    const next = order[(order.indexOf(taskState(t)) + 1) % 3];
-    t.progress = next;
-    t.done = next === 'done';
-    t.doneAt = next === 'done' ? Date.now() : null;
-    await savePlan(t);
-    haptic(next === 'done' ? 12 : 6);
-    closeSheetIfOpen();
-    refresh();
-  },
-
-  'task-menu': (el) => sheetItem(el.dataset.id),
-
-  'set-task-state': async (el) => {
-    const t = S.plan.find((x) => x.id === el.dataset.id);
-    if (!t) return;
-    const st = el.dataset.state;
-    t.progress = st;
-    t.done = st === 'done';
-    t.doneAt = st === 'done' ? Date.now() : null;
-    await savePlan(t);
-    closeSheet();
-    refresh();
-  },
-
-  'prio-task': async (el) => {
-    const t = S.plan.find((x) => x.id === el.dataset.id);
-    if (!t) return;
-    t.priority = t.priority === 'important' ? 'normal' : 'important';
-    await savePlan(t);
-    closeSheet();
-    refresh();
-  },
-
-  'delete-task': async (el) => {
-    const id = el.dataset.id;
-    const removed = S.plan.find((t) => t.id === id);
-    if (!removed) return;
-    S.plan = S.plan.filter((t) => t.id !== id);
-    await db.del('plan', id);
-    closeSheet();
-    refresh();
-    haptic(18);
-    toast('Task deleted', 6000, 'Undo', async () => {
-      S.plan.push(removed);
-      await db.put('plan', removed);
-      refresh();
-    });
-  },
-
-  carry: async () => {
-    const who = actor();
-    const y = dayKey(addDays(new Date(), -1));
-    const open = planFor(who.id, y).filter((t) => !t.done);
-    let pos = Math.max(0, ...planFor(who.id, dayKey()).map((t) => t.position));
-    for (const t of open) {
-      pos += 1;
-      await savePlan({ ...t, id: uid(), day: dayKey(), position: pos, done: false, doneAt: null, demo: false });
-    }
-    haptic(8);
-    refresh();
-    toast(`${open.length} moved to today`);
   },
 
   'exit-preview': () => { S.viewingAs = null; refresh(); },
@@ -3880,10 +2744,6 @@ const ACTIONS = {
   noop: () => {},
 };
 
-function closeSheetIfOpen() {
-  if ($('#overlay-root')?.firstElementChild) closeSheet();
-}
-
 /* ---------- events ---------- */
 document.addEventListener('click', (e) => {
   const el = e.target.closest('[data-act]');
@@ -3904,28 +2764,12 @@ document.addEventListener('focusout', () => {
   }, 320);
 });
 
-document.addEventListener('change', async (e) => {
-  const bar = e.target.closest('input[data-goal]');
-  if (!bar) return;
-  const g = S.goals.find((x) => x.id === bar.dataset.goal);
-  if (!g) return;
-
-  const value = Math.max(0, Math.min(100, Number(bar.value) || 0));
-  g.progress = value;
-  await saveGoal(g);
-  refresh();
-
-  if (value >= 100) sheetGoalDone(g.id);
-});
-
 document.addEventListener('input', (e) => {
   const range = e.target;
   if (!range.matches('input[type="range"]')) return;
   range.style.setProperty('--p', range.value * 10);
   const val = range.closest('.slider')?.querySelector('.val');
   if (val) val.textContent = range.value;
-  const pct = range.closest('.goal')?.querySelector('.goal-pct');
-  if (pct) pct.textContent = `${range.value}%`;
 });
 
 document.addEventListener('submit', async (e) => {
@@ -3935,50 +2779,18 @@ document.addEventListener('submit', async (e) => {
   const kind = form.dataset.form;
   const data = Object.fromEntries(new FormData(form).entries());
 
-  if (kind.startsWith('joy-')) {
-    await joy?.form(kind, data, form);
-    return;
-  }
-
-  if (kind === 'add-task') {
-    const title = String(data.title || '').trim();
-    if (!title) return;
-    const who = actor();
-    const list = planFor(who.id, dayKey());
-    const item = {
-      id: uid(),
-      memberId: who.id,
-      day: dayKey(),
-      title,
-      timeLabel: String(data.time || '').trim(),
-      priority: 'normal',
-      progress: 'todo',
-      done: false,
-      doneAt: null,
-      position: list.length ? list[list.length - 1].position + 1 : 0,
-      createdAt: Date.now(),
-      demo: false,
-    };
-    await savePlan(item);
-    haptic(8);
-    form.reset();
-    refresh();
-    setTimeout(() => $('.add-task input')?.focus(), 60);
-    return;
-  }
 
   if (kind === 'save-review') {
     const who = actor();
     const day = dayKey();
     const existing = reviewFor(who.id, day);
     const rec = {
+      ...existing,
       id: existing?.id || `${who.id}|${day}`,
       memberId: who.id,
       day,
-      wins: String(data.wins || '').trim(),
       productivity: clamp(Number(data.productivity), 0, 10),
       happiness: clamp(Number(data.happiness), 0, 10),
-      highlight: String(data.highlight || '').trim(),
       notes: existing?.notes || [],
       updatedAt: Date.now(),
       demo: false,
@@ -3987,31 +2799,6 @@ document.addEventListener('submit', async (e) => {
     haptic(14);
     refresh();
     toast('Saved · today is kept');
-    return;
-  }
-
-  if (kind === 'add-note') {
-    const id = form.dataset.review;
-    const rec = S.reviews.find((r) => r.id === id);
-    const text = String(data.note || '').trim();
-    if (!rec || !text) return;
-    const who = actor();
-    rec.notes = [...(rec.notes || []).filter((n) => n.from !== who.id), { from: who.id, text, at: Date.now() }];
-    rec.updatedAt = Date.now();
-    await saveReview(rec);
-    refresh();
-    toast('Sent');
-    return;
-  }
-
-  if (kind === 'rename-task') {
-    const t = S.plan.find((x) => x.id === form.dataset.id);
-    if (!t) return;
-    t.title = String(data.title || t.title).trim();
-    t.timeLabel = String(data.time || '').trim();
-    await savePlan(t);
-    closeSheet();
-    refresh();
     return;
   }
 
@@ -4033,39 +2820,6 @@ document.addEventListener('submit', async (e) => {
     closeSheet();
     refresh();
     toast(`Counting from ${v}`);
-    return;
-  }
-
-  if (kind === 'add-goal') {
-    const who = actor();
-    const title = String(data.title || '').trim();
-    if (!title) return;
-    const goal = {
-      id: uid(),
-      memberId: who.id,
-      scope: form.dataset.scope === 'secondary' ? 'secondary' : 'main',
-      title,
-      progress: 0,
-      createdAt: Date.now(),
-      completedAt: null,
-      demo: false,
-    };
-    await saveGoal(goal);
-    haptic(8);
-    form.reset();
-    refresh();
-    return;
-  }
-
-  if (kind === 'edit-goal') {
-    const g = S.goals.find((x) => x.id === form.dataset.id);
-    if (!g) return;
-    const title = String(data.title || '').trim();
-    if (!title) return;
-    g.title = title;
-    await saveGoal(g);
-    closeSheet();
-    refresh();
     return;
   }
 
@@ -4202,15 +2956,6 @@ function registerSW() {
   if (document.readyState === 'complete') start();
   else window.addEventListener('load', start, { once: true });
 }
-
-/* ---------- Halal Couple ---------- */
-function initJoy() {
-  joy = createJoy({
-    S, db, me, other, esc, dayKey, addDays, parseDay, uid, haptic,
-    toast, openSheet, closeSheet, notify, refresh, go, sendNudge, sync,
-  });
-}
-initJoy();
 
 /* ---------- go ---------- */
 async function main() {

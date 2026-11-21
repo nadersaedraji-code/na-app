@@ -1,7 +1,7 @@
 # N&A
 
-A private, installable app for two people. Five prayers, today's plan, a daily
-review, and a calendar of every day you share.
+A private, installable app for two people: five daily prayers and a daily
+satisfaction/productivity review, each scored out of 10.
 
 Vanilla JS. No framework, no build step, no dependencies. Data lives in
 IndexedDB on the device; the UI never waits on a network.
@@ -43,7 +43,7 @@ Two devices on one Mac can be simulated by opening `localhost:4173` and
 1. On phone A: **Settings → Connect the other phone → Start a shared space.**
 2. It shows a code like `NA-M476-6AMB-EABP-NE3P-BDRS`.
 3. On phone B: **Settings → Connect the other phone → I have a code**, type it.
-4. Prayers, plans, reviews and reactions now move between them within ~3 seconds
+4. Prayers and reviews now move between them within ~3 seconds
    (polling, which is plenty for two people).
 
 The code *is* the credential: 20 random characters, never sent anywhere except
@@ -78,7 +78,8 @@ Then publish. The version in `Settings → What's new` proves it landed.
 - `db.ensureSchema()` snapshots everything before applying a migration, and
   restores the snapshot if a step throws.
 - Migrations are additive only. No `DROP`, no `TRUNCATE`, no silent rewrites.
-- Every delete is soft and undoable; a full export is one tap away in Settings.
+- A full export is one tap away in Settings. Older plans and other records remain
+  in storage and backups even though their screens are no longer shown.
 
 ## Getting it on the phones
 

@@ -11,13 +11,16 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '4.0.0';
+const APP_VERSION = '4.0.1';
 const LOCALE = 'en-GB';
+const FRESH_START_DAY = '2026-11-22';
+const FRESH_START_CUTOFF = Date.parse('2026-11-22T20:15:52Z');
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '4.0.1', at: '22 Nov 2026', notes: "Counting starts today; old entries are cleared locally and from shared history when online." },
   { v: '4.0.0', at: '22 Nov 2026', notes: "Two clear places: prayer and daily satisfaction and productivity scores." },
   { v: '3.9.1', at: '19 Nov 2026', notes: 'A blank notification can no longer leave your phone, and one day finally reads like one day.' },
   { v: '3.9.0', at: '19 Nov 2026', notes: 'Sixty-four more game prompts for the two of you, and the last small labels that were hiding in the dark.' },
@@ -306,21 +309,37 @@ const statsStart = () => S.settings.startDate || dayKey();
 
 async function ensureStartDate() {
   if (S.settings.startDate) return;
-  S.settings.startDate = dayKey(addDays(new Date(), 1));
+  S.settings.startDate = dayKey();
   await db.put('meta', { key: 'settings', value: S.settings });
 }
 
-/* One quiet correction: this couple asked for counting to begin on
-   19 November 2026. Existing installs move once; a later manual choice
-   in Settings is respected forever after. */
-async function alignCountingStart() {
-  if (S.settings.countingFromMoved === '2026-11-19') return;
+/** One requested fresh start. Keep identities, pairing and prayer preferences.
+ * Tombstones are queued for synced rows so the other phone cannot restore them. */
+async function resetHistoryForFreshStart() {
   if (!S.members.length) return;
-  const changed = S.settings.startDate !== '2026-11-19';
-  S.settings.countingFromMoved = '2026-11-19';
-  if (changed) S.settings.startDate = '2026-11-19';
-  await db.put('meta', { key: 'settings', value: S.settings });
-  if (changed) setTimeout(() => toast('Counting now begins 19 November'), 900);
+  let reset = (await db.get('meta', 'history-reset'))?.value;
+  if (!reset) {
+    reset = { cutoff: FRESH_START_CUTOFF, resetDay: FRESH_START_DAY, pending: sync.isOn() };
+    sync.discardHistoryWrites();
+    for (const store of sync.HISTORY_STORES) {
+      for (const row of await db.getAll(store)) {
+        const timestamp = row.updatedAt || row.loggedAt || row.createdAt || 0;
+        if (timestamp <= FRESH_START_CUTOFF || row.day < FRESH_START_DAY) {
+          await db.del(store, row.id);
+        }
+      }
+    }
+    // Old migration snapshots can themselves contain a full copy of the history.
+    await db.clear('snapshots');
+    localStorage.removeItem('na:notified');
+    localStorage.removeItem('na:lastNotif');
+    localStorage.removeItem('na:pingsSeen');
+    S.settings.startDate = FRESH_START_DAY;
+    await db.put('meta', { key: 'settings', value: S.settings });
+    await db.put('meta', { key: 'history-reset', value: reset });
+    await loadState();
+  }
+  if (reset.pending) await sync.finishHistoryReset(reset.cutoff, reset.resetDay);
 }
 
 /* ---------- state access ---------- */
@@ -430,13 +449,13 @@ async function boot() {
     await loadState();
     await migrateTheme();
     await ensureStartDate();
-    await alignCountingStart();
     db.setHooks({
       onWrite: (store, rec) => sync.queueWrite(store, rec),
       onDelete: (store, id) => sync.queueDelete(store, id),
     });
     sync.attach({ onChange: onRemoteChange, onStatus: (s) => { S.syncState = s; } });
     await sync.load();
+    await resetHistoryForFreshStart();
   } catch (err) {
     console.error(err);
     toast('Could not open local storage');
@@ -675,10 +694,14 @@ async function completeOnboarding(solo) {
     ...loc,
     preset: loc.preset || null,
     notif: { ...DEFAULTS.notif },
-    startDate: '2026-11-19',
+    startDate: dayKey(),
     countingFromMoved: '2026-11-19',
   };
   await db.put('meta', { key: 'settings', value: firstSettings });
+  await db.put('meta', {
+    key: 'history-reset',
+    value: { cutoff: FRESH_START_CUTOFF, resetDay: FRESH_START_DAY, pending: false },
+  });
   await db.saveMeta('app', { viewerId: meId, schemaVersion: db.SCHEMA_VERSION });
   if (SEED_SAMPLE) {
     try {

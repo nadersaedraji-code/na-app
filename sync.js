@@ -9,6 +9,7 @@ import * as db from './db.js';
 
 const SYNCED = new Set(['prayers', 'plan', 'reviews', 'reactions', 'members', 'goals', 'cycles', 'nudges', 'joy']);
 const QUEUE_KEY = 'na:queue';
+export const HISTORY_STORES = ['prayers', 'plan', 'reviews', 'reactions', 'goals', 'cycles', 'nudges', 'joy'];
 
 let cfg = null;            // { mode, key, base?, url?, apikey?, lastSync? }
 let lastSync = null;
@@ -220,6 +221,39 @@ export function queueDelete(store, id) {
   schedulePush();
 }
 
+/** Do not let an old offline write recreate an entry after the fresh start. */
+export function discardHistoryWrites() {
+  for (const kind of HISTORY_STORES) queue[kind].clear();
+  persistQueue();
+}
+
+function oldHistoryRow(row, cutoff, resetDay) {
+  return (row.day && row.day < resetDay)
+    || Date.parse(row.logged_at || row.created_at || row.updated_at) <= cutoff;
+}
+
+/** Delete old server rows through the normal tombstone protocol.
+ * Retry after an offline failure before any ordinary pull can restore them.
+ * Members are deliberately excluded: pairing and profiles stay intact. */
+export async function finishHistoryReset(cutoff, resetDay) {
+  if (!cfg || busy) return !cfg;
+  try {
+    const data = await rpc('na_pull', { p_key: cfg.key, p_since: '1970-01-01T00:00:00.000Z' });
+    for (const kind of HISTORY_STORES) {
+      for (const row of data[kind] || []) {
+        if (row.deleted_at || !row.id) continue;
+        if (oldHistoryRow(row, cutoff, resetDay)) queueDelete(kind, row.id);
+      }
+    }
+    if (!(await flush())) return false;
+    await db.put('meta', { key: 'history-reset', value: { cutoff, resetDay, pending: false } });
+    return true;
+  } catch (err) {
+    console.warn('history reset will retry when online', err);
+    return false;
+  }
+}
+
 function schedulePush() {
   clearTimeout(pushTimer);
   pushTimer = setTimeout(flush, 500);
@@ -245,9 +279,9 @@ function buildPayload() {
 }
 
 export async function flush() {
-  if (!cfg || busy || state === 'gone') return;
+  if (!cfg || busy || state === 'gone') return false;
   const payload = buildPayload();
-  if (!payload) return;
+  if (!payload) return true;
 
   busy = true;
   setState('syncing');
@@ -261,9 +295,11 @@ export async function flush() {
     persistQueue();
     setState('live');
     lastSync = new Date().toISOString();
+    return true;
   } catch (err) {
     console.warn('push failed', err.message);
     setState('error');
+    return false;
   } finally {
     busy = false;
   }
@@ -272,6 +308,8 @@ export async function flush() {
 /* ---------- pull ---------- */
 export async function pull() {
   if (!cfg) return null;
+  const reset = (await db.get('meta', 'history-reset'))?.value;
+  if (reset?.pending && !(await finishHistoryReset(reset.cutoff, reset.resetDay))) return null;
   setState('syncing');
   try {
     const since = lastSync || '1970-01-01T00:00:00.000Z';
@@ -280,6 +318,11 @@ export async function pull() {
     await db.mute(async () => {
       for (const kind of ['members', 'prayers', 'plan', 'reviews', 'reactions', 'goals', 'cycles', 'nudges', 'joy']) {
         for (const w of data[kind] || []) {
+          if (w.deleted_at) continue;
+          if (reset && HISTORY_STORES.includes(kind) && oldHistoryRow(w, reset.cutoff, reset.resetDay)) {
+            queueDelete(kind, w.id);
+            continue;
+          }
           const row = fromWire(kind, w);
           if (row) await db.put(kind, row);
         }
@@ -323,6 +366,10 @@ export async function begin(member) {
     p_member: { id: member.id, name: member.name, color: member.color, avatar: member.avatar, tz: member.tz },
   });
 
+  const reset = (await db.get('meta', 'history-reset'))?.value;
+  if (reset && !(await finishHistoryReset(reset.cutoff, reset.resetDay))) {
+    throw new Error('Could not finish clearing old shared history yet');
+  }
   await pull();
 
   // Anything already on this device (that isn't sample data) goes up once.

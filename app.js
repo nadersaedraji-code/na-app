@@ -11,15 +11,17 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '4.1.0';
+const APP_VERSION = '4.1.1';
 const LOCALE = 'en-GB';
 const FRESH_START_DAY = '2026-11-22';
 const FRESH_START_CUTOFF = Date.parse('2026-11-22T20:15:52Z');
+const COUNTING_START_DAY = '2026-11-23';
 
 /* Sample history is off. A new space starts genuinely empty — no
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '4.1.1', at: '23 Nov 2026', notes: "Scores run from 1 to 10 on one row, and counting begins 23 November." },
   { v: '4.1.0', at: '23 Nov 2026', notes: "Prayer streaks, interactive daily scores and weekly recaps; notifications are off." },
   { v: '4.0.1', at: '22 Nov 2026', notes: "Counting starts today; old entries are cleared locally and from shared history when online." },
   { v: '4.0.0', at: '22 Nov 2026', notes: "Two clear places: prayer and daily satisfaction and productivity scores." },
@@ -279,6 +281,7 @@ const uid = () =>
   crypto.randomUUID ? crypto.randomUUID() : 'id-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
 const pad = (n) => String(n).padStart(2, '0');
 const clamp = (n, a, b) => Math.min(b, Math.max(a, n));
+const displayedScore = (n) => Number.isFinite(n) ? clamp(n, 1, 10) : null;
 const haptic = (ms = 8) => { try { navigator.vibrate?.(ms); } catch { /* iOS */ } };
 
 const dayKey = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -315,6 +318,13 @@ const statsStart = () => S.settings.startDate || dayKey();
 async function ensureStartDate() {
   if (S.settings.startDate) return;
   S.settings.startDate = dayKey();
+  await db.put('meta', { key: 'settings', value: S.settings });
+}
+
+async function alignCountingStart() {
+  if (!S.members.length || S.settings.countingFromMoved === COUNTING_START_DAY) return;
+  S.settings.startDate = COUNTING_START_DAY;
+  S.settings.countingFromMoved = COUNTING_START_DAY;
   await db.put('meta', { key: 'settings', value: S.settings });
 }
 
@@ -462,6 +472,7 @@ async function boot() {
     sync.attach({ onChange: onRemoteChange, onStatus: (s) => { S.syncState = s; } });
     await sync.load();
     await resetHistoryForFreshStart();
+    await alignCountingStart();
   } catch (err) {
     console.error(err);
     toast('Could not open local storage');
@@ -712,7 +723,7 @@ async function completeOnboarding(solo) {
     preset: loc.preset || null,
     notif: { ...DEFAULTS.notif },
     startDate: dayKey(),
-    countingFromMoved: '2026-11-19',
+    countingFromMoved: COUNTING_START_DAY,
   };
   await db.put('meta', { key: 'settings', value: firstSettings });
   await db.put('meta', {
@@ -1649,8 +1660,8 @@ function viewReview() {
   const metric = (label, a, b) => `
     <div class="metric">
       <span class="lab">${label}</span>
-      <b class="num">${a ?? '–'}</b>
-      <b class="num">${b ?? '–'}</b>
+      <b class="num">${displayedScore(a) ?? '–'}</b>
+      <b class="num">${displayedScore(b) ?? '–'}</b>
     </div>`;
 
   const compare = p ? `
@@ -1678,8 +1689,8 @@ function viewReview() {
     ${compare}
 
     <form class="review-form" data-form="save-review">
-      ${scoreControl('happiness', 'Satisfaction', mine?.happiness ?? 5, 'How happy did today feel?')}
-      ${scoreControl('productivity', 'Productivity', mine?.productivity ?? 5, 'How much could you get done?')}
+      ${scoreControl('happiness', 'Satisfaction', displayedScore(mine?.happiness) ?? 5, 'How happy did today feel?')}
+      ${scoreControl('productivity', 'Productivity', displayedScore(mine?.productivity) ?? 5, 'How much could you get done?')}
       <div class="card card-pad">
        <button class="btn primary wide" type="submit">${saved ? 'Update today' : 'Save today'}</button>
        ${saved ? `<div style="text-align:center;font-size:12px;color:var(--ink-3);margin-top:10px">Saved · you can change it until the day ends</div>` : ''}
@@ -1705,11 +1716,11 @@ function scoreControl(field, label, value, question) {
       <div class="score-dial" aria-hidden="true"><b class="num score-value">${value}</b><small>/ 10</small></div>
     </div>
     <div class="score-choices" role="radiogroup" aria-label="${label} out of 10">
-      ${Array.from({ length: 11 }, (_, n) => `<button type="button" role="radio" data-act="score-pick" data-score="${n}"
+      ${Array.from({ length: 10 }, (_, i) => i + 1).map((n) => `<button type="button" role="radio" data-act="score-pick" data-score="${n}"
         aria-label="${n} out of 10" aria-checked="${n === value}" tabindex="${n === value ? '0' : '-1'}"
         class="${n <= value ? 'filled' : ''}">${n}</button>`).join('')}
     </div>
-    <div class="score-foot"><span>0 · Very low</span><strong class="score-description">${scoreDescription(value, field)}</strong><span>10 · Excellent</span></div>
+    <div class="score-foot"><span>1 · Very low</span><strong class="score-description">${scoreDescription(value, field)}</strong><span>10 · Excellent</span></div>
   </section>`;
 }
 
@@ -1725,7 +1736,7 @@ function gradeTrend(who, partner) {
   }
   const w = 320, h = 146, left = 27, right = 10, top = 12, bottom = 22;
   const x = (i) => left + (i / Math.max(1, days.length - 1)) * (w - left - right);
-  const y = (score) => top + ((10 - score) / 10) * (h - top - bottom);
+  const y = (score) => top + ((10 - displayedScore(score)) / 9) * (h - top - bottom);
   const line = (key) => {
     const recorded = days.map(({ review }, i) => {
       const score = review?.[key];
@@ -1736,7 +1747,7 @@ function gradeTrend(who, partner) {
   };
   const points = (key, cls) => days.map(({ day, review }, i) =>
     Number.isFinite(review?.[key])
-      ? `<circle class="${cls}" cx="${x(i).toFixed(1)}" cy="${y(review[key]).toFixed(1)}" r="3.3"><title>${esc(dayLabel(day))}: ${key === 'happiness' ? 'Satisfaction' : 'Productivity'} ${review[key]}/10</title></circle>`
+      ? `<circle class="${cls}" cx="${x(i).toFixed(1)}" cy="${y(review[key]).toFixed(1)}" r="3.3"><title>${esc(dayLabel(day))}: ${key === 'happiness' ? 'Satisfaction' : 'Productivity'} ${displayedScore(review[key])}/10</title></circle>`
       : '').join('');
   const hasGrades = days.some(({ review }) =>
     Number.isFinite(review?.happiness) || Number.isFinite(review?.productivity));
@@ -1749,8 +1760,8 @@ function gradeTrend(who, partner) {
         <button data-act="trend-person" data-person="partner" aria-pressed="${member.id === partner.id}">${esc(partner.name)}</button>
       </div>` : `<div class="grade-person">${esc(who.name)}</div>`}
       <div class="chart-legend"><span><i class="dot h"></i>Satisfaction</span><span><i class="dot p"></i>Productivity</span></div>
-      ${hasGrades ? `<svg class="chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(member.name)}'s satisfaction and productivity scores over the last ${days.length} days, on a scale from 0 to 10">
-        ${[0, 5, 10].map((n) => `<line class="grid" x1="${left}" x2="${w - right}" y1="${y(n)}" y2="${y(n)}"/><text class="axis" x="${left - 7}" y="${y(n) + 3}">${n}</text>`).join('')}
+      ${hasGrades ? `<svg class="chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(member.name)}'s satisfaction and productivity scores over the last ${days.length} ${days.length === 1 ? 'day' : 'days'}, on a scale from 1 to 10">
+      ${[1, 5, 10].map((n) => `<line class="grid" x1="${left}" x2="${w - right}" y1="${y(n)}" y2="${y(n)}"/><text class="axis" x="${left - 7}" y="${y(n) + 3}">${n}</text>`).join('')}
         <path class="grade-line satisfaction" d="${line('happiness')}"/>
         <path class="grade-line productivity" d="${line('productivity')}"/>
         ${points('happiness', 'satisfaction')}${points('productivity', 'productivity')}
@@ -1790,7 +1801,7 @@ function weeklyRecap(who, partner) {
       days.push({ day, review, statuses });
     }
     const average = (field) => {
-      const values = days.map((d) => d.review?.[field]).filter(Number.isFinite);
+      const values = days.map((d) => displayedScore(d.review?.[field])).filter(Number.isFinite);
       return values.length ? values.reduce((sum, n) => sum + n, 0) / values.length : null;
     };
     const kept = days.reduce((n, d) => n + validPrayerCount(member.id, d.day), 0);
@@ -1857,8 +1868,8 @@ function dayHistory(who, partner) {
     return `<div class="history-person">
       <div class="history-person-name"><span>${esc(member.avatar)}</span>${esc(member.name)}</div>
       <div class="their-scores">
-        <div><span>Satisfaction</span><b class="num">${review?.happiness ?? '–'}</b><i>/10</i></div>
-        <div><span>Productivity</span><b class="num">${review?.productivity ?? '–'}</b><i>/10</i></div>
+        <div><span>Satisfaction</span><b class="num">${displayedScore(review?.happiness) ?? '–'}</b><i>/10</i></div>
+        <div><span>Productivity</span><b class="num">${displayedScore(review?.productivity) ?? '–'}</b><i>/10</i></div>
       </div>
       <div class="history-prayers">${prayers}</div>
     </div>`;
@@ -3055,7 +3066,7 @@ document.addEventListener('keydown', (e) => {
   const delta = { ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1 };
   if (!(e.key in delta) && e.key !== 'Home' && e.key !== 'End') return;
   e.preventDefault();
-  const next = e.key === 'Home' ? 0 : e.key === 'End' ? 10 : clamp(Number(option.dataset.score) + delta[e.key], 0, 10);
+  const next = e.key === 'Home' ? 1 : e.key === 'End' ? 10 : clamp(Number(option.dataset.score) + delta[e.key], 1, 10);
   const target = option.closest('.score-choices').querySelector(`[data-score="${next}"]`);
   pickScore(target);
   target.focus();
@@ -3078,8 +3089,8 @@ document.addEventListener('submit', async (e) => {
       id: existing?.id || `${who.id}|${day}`,
       memberId: who.id,
       day,
-      productivity: clamp(Number(data.productivity), 0, 10),
-      happiness: clamp(Number(data.happiness), 0, 10),
+      productivity: clamp(Number(data.productivity), 1, 10),
+      happiness: clamp(Number(data.happiness), 1, 10),
       notes: existing?.notes || [],
       updatedAt: Date.now(),
       demo: false,

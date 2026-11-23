@@ -11,7 +11,7 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '4.0.1';
+const APP_VERSION = '4.1.0';
 const LOCALE = 'en-GB';
 const FRESH_START_DAY = '2026-11-22';
 const FRESH_START_CUTOFF = Date.parse('2026-11-22T20:15:52Z');
@@ -20,6 +20,7 @@ const FRESH_START_CUTOFF = Date.parse('2026-11-22T20:15:52Z');
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '4.1.0', at: '23 Nov 2026', notes: "Prayer streaks, interactive daily scores and weekly recaps; notifications are off." },
   { v: '4.0.1', at: '22 Nov 2026', notes: "Counting starts today; old entries are cleared locally and from shared history when online." },
   { v: '4.0.0', at: '22 Nov 2026', notes: "Two clear places: prayer and daily satisfaction and productivity scores." },
   { v: '3.9.1', at: '19 Nov 2026', notes: 'A blank notification can no longer leave your phone, and one day finally reads like one day.' },
@@ -148,11 +149,11 @@ const DEFAULTS = {
   method: 'MWL',
   theme: 'light',
   notif: {
-    prayer: true,
-    followup: true,
-    review: true,
-    partner: true,
-    urgency: true,
+    prayer: false,
+    followup: false,
+    review: false,
+    partner: false,
+    urgency: false,
     lead: 20,
     prayers: { fajr: true, dhuhr: true, asr: true, maghrib: true, isha: true },
   },
@@ -251,6 +252,10 @@ const S = {
   viewerId: null,
   viewingAs: null,
   view: 'prayer',
+  trendMember: 'mine',
+  historyDay: null,
+  recapMember: 'mine',
+  recapWeek: null,
   planTab: 'mine',
   goalTab: 'mine',
   calMonth: null,
@@ -449,6 +454,7 @@ async function boot() {
     await loadState();
     await migrateTheme();
     await ensureStartDate();
+    await disableNotifications();
     db.setHooks({
       onWrite: (store, rec) => sync.queueWrite(store, rec),
       onDelete: (store, id) => sync.queueDelete(store, id),
@@ -465,8 +471,6 @@ async function boot() {
     renderOnboarding();
   } else {
     showApp();
-    startPrayerWatch();
-    deliverNudges();
     const logParam = new URLSearchParams(location.search).get('log');
     if (logParam) {
       history.replaceState(null, '', location.pathname + location.hash);
@@ -492,6 +496,19 @@ async function boot() {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') applySky();
   });
+}
+
+async function disableNotifications() {
+  const n = S.settings.notif;
+  if (n.prayer || n.followup || n.review || n.partner || n.urgency) {
+    S.settings.notif = { ...n, prayer: false, followup: false, review: false, partner: false, urgency: false };
+    await db.put('meta', { key: 'settings', value: S.settings });
+  }
+  // Permission belongs to the browser; we stop sending and close alerts already shown.
+  navigator.serviceWorker?.getRegistration?.()
+    .then((reg) => reg?.getNotifications?.())
+    .then((alerts) => alerts?.forEach((alert) => alert.close()))
+    .catch(() => {});
 }
 
 /* One-time: devices onboarded before 1.4.0 saved "dark". Move them to the
@@ -941,17 +958,14 @@ function go(view) {
 }
 
 /** A day counts when all five are kept: on time, at the mosque, or period. */
+const validPrayer = (rec) => !!rec && (rec.status === 'ontime' || rec.status === 'period' || rec.mosque === true);
+const validPrayerCount = (memberId, day) =>
+  PRAYER_ORDER.filter((key) => validPrayer(getPrayer(memberId, day, key))).length;
+
 function perfectDays(memberId) {
-  const tally = new Map();
-  for (const r of S.prayers) {
-    if (r.memberId !== memberId) continue;
-    const counts = r.status === 'ontime' || r.status === 'period' || r.mosque === true;
-    if (!counts) continue;
-    tally.set(r.day, (tally.get(r.day) || 0) + 1);
-  }
-  const out = new Set();
-  for (const [day, n] of tally) if (n >= 5) out.add(day);
-  return out;
+  const days = new Set(S.prayers.filter((r) => r.memberId === memberId).map((r) => r.day));
+  return new Set([...days].filter((day) =>
+    PRAYER_ORDER.every((key) => validPrayer(getPrayer(memberId, day, key)))));
 }
 
 /** A day is excused when all five prayers are marked as period. */
@@ -972,7 +986,7 @@ const prayerKept = (r) => !!r && (r.status === 'ontime' || r.mosque === true);
 const prayerCounted = (r) => !!r && (r.status === 'ontime' || r.status === 'late');
 
 /**
- * A day joins the streak only when all five prayers were on time.
+ * A day joins the streak when all five are on time, at the mosque, or period.
  * Today never breaks a streak while it is still being lived —
  * the count falls back to yesterday until today is complete.
  */
@@ -1006,6 +1020,36 @@ function streakOf(memberId) {
 
 const flameSvg = (size = 16) =>
   `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c2.9 3.3 5 5.7 5 8.6a5 5 0 0 1-10 0C7 8.7 9.1 6.3 12 3Z"/><path d="M12 12.4c1 .9 1.6 1.8 1.6 2.7a1.6 1.6 0 1 1-3.2 0c0-.9.6-1.8 1.6-2.7Z"/></svg>`;
+
+function streakPanel(member) {
+  const streak = streakOf(member.id);
+  const today = dayKey();
+  const perfect = perfectDays(member.id);
+  const progress = validPrayerCount(member.id, today);
+  const week = Array.from({ length: 7 }, (_, i) => {
+    const day = dayKey(addDays(parseDay(today), i - 6));
+    const kept = validPrayerCount(member.id, day);
+    const before = day < statsStart();
+    return `<button class="streak-day ${perfect.has(day) ? 'complete' : ''} ${day === today ? 'today' : ''}"
+      data-act="streak-day" data-day="${day}" ${before ? 'disabled' : ''}
+      aria-label="${esc(dayLabel(day))}: ${before ? 'before counting' : `${kept} of 5 valid prayers${perfect.has(day) ? ', streak day' : ''}`}">
+      <span>${parseDay(day).toLocaleDateString(LOCALE, { weekday: 'narrow' })}</span>
+      <i>${perfect.has(day) ? '✦' : kept || '·'}</i>
+    </button>`;
+  }).join('');
+  return `<section class="streak-panel card">
+    <div class="streak-main">
+      <div class="streak-symbol">${flameSvg(26)}</div>
+      <div><div class="streak-label">${esc(member.name)}'s prayer streak</div>
+        <div class="streak-number num">${streak.current}<span> ${streak.current === 1 ? 'day' : 'days'}</span></div>
+        <div class="streak-detail">${perfect.has(today) ? 'All five count today — your streak grows.' : `${progress} of 5 valid today · on time, mosque or period`}</div>
+      </div>
+      <div class="streak-record">Best <b class="num">${streak.best}</b></div>
+    </div>
+    <div class="streak-days" aria-label="Last seven days">${week}</div>
+    <p class="streak-rule">Each day counts only when all five prayers qualify. Tap a day to see both people’s details.</p>
+  </section>`;
+}
 
 /* ============================================================
    Qibla — the bearing to the Kaaba, and a live compass
@@ -1318,6 +1362,8 @@ function once(key, fn) {
 }
 
 async function notify(title, body, tag, extra = {}) {
+  // Notifications were cancelled; this also guards older, no-longer-visible actions.
+  return 'disabled';
   const url = new URL('./', location.href).href;
   const opts = {
     body,
@@ -1500,17 +1546,20 @@ function viewPrayer() {
         <span class="avatar" style="box-shadow:0 0 0 2px ${p.color}44">${p.avatar}</span>
         <span>
           <span class="name">${esc(p.name)}</span>
-          <span class="count num">${isExcused(p.id, today) ? 'excused today' : `${prayerCount(p.id, today)} of 5 · today`}</span>
+           <span class="count num">${validPrayerCount(p.id, today)} of 5 valid · today</span>
         </span>
       </div>
-      <div class="mini-prayers">
+      <div class="partner-prayers">
         ${PRAYER_ORDER.map((k) => {
           const r = getPrayer(p.id, today, k);
           const st = r?.status || 'pending';
           const react = r ? reactionFor(who.id, 'prayer', r.id) : null;
-          return `<button class="mini" data-state="${st}" data-mosque="${r?.mosque ? '1' : '0'}" data-act="react-prayer" data-id="${r?.id || ''}" data-key="${k}"
-            aria-label="${p.name} · ${PMETA[k].name} · ${STATUS_LABEL[st]}">
-            ${PMETA[k].abbr}${react ? `<span class="react">${react.emoji}</span>` : ''}
+          return `<button class="partner-prayer" data-act="react-prayer" data-id="${r?.id || ''}" ${r ? '' : 'disabled'}
+            aria-label="${esc(p.name)} · ${PMETA[k].name} · ${STATUS_LABEL[st]}${r?.mosque ? ' · mosque' : ''}${r ? ' · send a reaction' : ''}">
+            <span class="partner-prayer-name">${PMETA[k].name}</span>
+            <span class="pill ${st}"><span class="dot"></span>${STATUS_LABEL[st]}</span>
+            ${r?.mosque ? `<span class="partner-mosque">${I.mosque} Mosque</span>` : ''}
+            ${react ? `<span aria-hidden="true">${react.emoji}</span>` : ''}
           </button>`;
         }).join('')}
       </div>
@@ -1547,6 +1596,8 @@ function viewPrayer() {
     </div>
 
     <div class="prayers stagger">${rows}</div>
+    <div class="section-title">Your streak</div>
+    ${streakPanel(who)}
 
     ${qiblaStrip()}
 
@@ -1554,8 +1605,9 @@ function viewPrayer() {
 
     <div class="section-title">${p ? 'Side by side' : 'Your partner'}</div>
     ${partnerCard}
+    ${p ? streakPanel(p) : ''}
 
-    <div class="section-title">Last seven days <span class="link">${week.total}/35</span></div>
+    <div class="section-title">Last seven days <span class="link">${week.total}/${week.possible}</span></div>
     <div class="card card-pad">
       ${week.html}
     </div>
@@ -1565,20 +1617,22 @@ function viewPrayer() {
 function lastSeven(memberId) {
   const today = new Date();
   let total = 0;
+  let possible = 0;
   const cols = [];
   for (let i = 6; i >= 0; i--) {
     const d = addDays(today, -i);
     const k = dayKey(d);
+    if (k >= statsStart()) possible += 5;
     const dots = PRAYER_ORDER.map((p) => {
       const r = getPrayer(memberId, k, p);
-      if (r && r.status !== 'missed') total++;
+      if (k >= statsStart() && validPrayer(r)) total++;
       return `<i class="dot ${r?.status || ''}"></i>`;
     }).join('');
     cols.push(`<div class="col ${i === 0 ? 'today' : ''}">
       <span class="dow">${d.toLocaleDateString(LOCALE, { weekday: 'narrow' })}</span>${dots}
     </div>`);
   }
-  return { html: `<div class="week">${cols.join('')}</div>`, total };
+  return { html: `<div class="week">${cols.join('')}</div>`, total, possible };
 }
 
 /* ============================================================
@@ -1623,39 +1677,203 @@ function viewReview() {
 
     ${compare}
 
-    <form class="card card-pad" data-form="save-review">
-       <div class="field slider">
-         <div class="top"><label class="label" for="satisfaction-score" style="margin:0">Satisfaction</label><div class="big num"><span class="val">${mine?.happiness ?? 5}</span><span>/10</span></div></div>
-         <input id="satisfaction-score" type="range" name="happiness" min="0" max="10" step="1" value="${mine?.happiness ?? 5}" style="--p:${(mine?.happiness ?? 5) * 10}">
-       </div>
-
-       <div class="field slider">
-         <div class="top"><label class="label" for="productivity-score" style="margin:0">Productivity</label><div class="big num"><span class="val">${mine?.productivity ?? 5}</span><span>/10</span></div></div>
-         <input id="productivity-score" type="range" name="productivity" min="0" max="10" step="1" value="${mine?.productivity ?? 5}" style="--p:${(mine?.productivity ?? 5) * 10}">
+    <form class="review-form" data-form="save-review">
+      ${scoreControl('happiness', 'Satisfaction', mine?.happiness ?? 5, 'How happy did today feel?')}
+      ${scoreControl('productivity', 'Productivity', mine?.productivity ?? 5, 'How much could you get done?')}
+      <div class="card card-pad">
+       <button class="btn primary wide" type="submit">${saved ? 'Update today' : 'Save today'}</button>
+       ${saved ? `<div style="text-align:center;font-size:12px;color:var(--ink-3);margin-top:10px">Saved · you can change it until the day ends</div>` : ''}
       </div>
-
-      <button class="btn primary wide" type="submit">${saved ? 'Update today' : 'Save today'}</button>
-      ${saved ? `<div style="text-align:center;font-size:12px;color:var(--ink-3);margin-top:10px">Saved · you can change it until the day ends</div>` : ''}
     </form>
 
-    ${p ? `
-      <div class="section-title">${esc(p.name)}'s day</div>
-      <div class="card card-pad">
-        ${theirs ? `
-          <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px">
-            <span class="avatar" style="width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:var(--card-hi);border:1px solid var(--line)">${p.avatar}</span>
-            <div>
-              <div style="font-size:14px;font-weight:600">${esc(p.name)}</div>
-              <div style="font-size:12px;color:var(--ink-3)">${theirs.updatedAt && dayKey(new Date(theirs.updatedAt)) === today ? `logged ${new Date(theirs.updatedAt).toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' })}` : 'logged today'}</div>
-            </div>
-          </div>
-           <div class="their-scores">
-             <div><span>Satisfaction</span><b class="num">${theirs.happiness ?? '–'}</b><i>/10</i></div>
-             <div><span>Productivity</span><b class="num">${theirs.productivity ?? '–'}</b><i>/10</i></div>
-           </div>
-         ` : `<div class="empty" style="border:0;padding:14px"><b>Not written yet</b>${esc(p.name)} hasn't logged today. Give them time.</div>`}
-      </div>` : ''}
+    ${gradeTrend(who, p)}
+    ${weeklyRecap(who, p)}
+    ${dayHistory(who, p)}
   `;
+}
+
+const scoreDescription = (score, field) => field === 'productivity'
+  ? (score <= 2 ? 'A slow day' : score <= 4 ? 'Finding focus' : score <= 6 ? 'Making progress' : score <= 8 ? 'Focused' : 'In full flow')
+  : (score <= 2 ? 'A difficult day' : score <= 4 ? 'Room to breathe' : score <= 6 ? 'Finding a rhythm' : score <= 8 ? 'A good day' : 'Feeling bright');
+
+function scoreControl(field, label, value, question) {
+  const tone = field === 'happiness' ? 'satisfaction' : 'productivity';
+  return `<section class="score-control card ${tone}" data-score-control="${field}" style="--score:${value}">
+    <input type="hidden" name="${field}" value="${value}">
+    <div class="score-top">
+      <div><div class="score-label">${label}</div><p>${question}</p></div>
+      <div class="score-dial" aria-hidden="true"><b class="num score-value">${value}</b><small>/ 10</small></div>
+    </div>
+    <div class="score-choices" role="radiogroup" aria-label="${label} out of 10">
+      ${Array.from({ length: 11 }, (_, n) => `<button type="button" role="radio" data-act="score-pick" data-score="${n}"
+        aria-label="${n} out of 10" aria-checked="${n === value}" tabindex="${n === value ? '0' : '-1'}"
+        class="${n <= value ? 'filled' : ''}">${n}</button>`).join('')}
+    </div>
+    <div class="score-foot"><span>0 · Very low</span><strong class="score-description">${scoreDescription(value, field)}</strong><span>10 · Excellent</span></div>
+  </section>`;
+}
+
+/** Plot only recorded scores. Missing days never become zero. */
+function gradeTrend(who, partner) {
+  const member = S.trendMember === 'partner' && partner ? partner : who;
+  const today = dayKey();
+  const start = statsStart();
+  const days = [];
+  for (let i = 29; i >= 0; i--) {
+    const day = dayKey(addDays(parseDay(today), -i));
+    if (day >= start) days.push({ day, review: reviewFor(member.id, day) });
+  }
+  const w = 320, h = 146, left = 27, right = 10, top = 12, bottom = 22;
+  const x = (i) => left + (i / Math.max(1, days.length - 1)) * (w - left - right);
+  const y = (score) => top + ((10 - score) / 10) * (h - top - bottom);
+  const line = (key) => {
+    const recorded = days.map(({ review }, i) => {
+      const score = review?.[key];
+      return Number.isFinite(score) ? { i, score } : null;
+    }).filter(Boolean);
+    return recorded.map(({ i, score }, n) =>
+      `${n ? 'L' : 'M'}${x(i).toFixed(1)} ${y(score).toFixed(1)}`).join(' ');
+  };
+  const points = (key, cls) => days.map(({ day, review }, i) =>
+    Number.isFinite(review?.[key])
+      ? `<circle class="${cls}" cx="${x(i).toFixed(1)}" cy="${y(review[key]).toFixed(1)}" r="3.3"><title>${esc(dayLabel(day))}: ${key === 'happiness' ? 'Satisfaction' : 'Productivity'} ${review[key]}/10</title></circle>`
+      : '').join('');
+  const hasGrades = days.some(({ review }) =>
+    Number.isFinite(review?.happiness) || Number.isFinite(review?.productivity));
+
+  return `
+    <div class="section-title">Scores over time</div>
+    <section class="card card-pad grade-trend">
+      ${partner ? `<div class="seg" role="group" aria-label="Whose scores">
+        <button data-act="trend-person" data-person="mine" aria-pressed="${member.id === who.id}">Mine</button>
+        <button data-act="trend-person" data-person="partner" aria-pressed="${member.id === partner.id}">${esc(partner.name)}</button>
+      </div>` : `<div class="grade-person">${esc(who.name)}</div>`}
+      <div class="chart-legend"><span><i class="dot h"></i>Satisfaction</span><span><i class="dot p"></i>Productivity</span></div>
+      ${hasGrades ? `<svg class="chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(member.name)}'s satisfaction and productivity scores over the last ${days.length} days, on a scale from 0 to 10">
+        ${[0, 5, 10].map((n) => `<line class="grid" x1="${left}" x2="${w - right}" y1="${y(n)}" y2="${y(n)}"/><text class="axis" x="${left - 7}" y="${y(n) + 3}">${n}</text>`).join('')}
+        <path class="grade-line satisfaction" d="${line('happiness')}"/>
+        <path class="grade-line productivity" d="${line('productivity')}"/>
+        ${points('happiness', 'satisfaction')}${points('productivity', 'productivity')}
+      </svg>
+      <div class="chart-x"><span>${days.length ? parseDay(days[0].day).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' }) : ''}</span><span>Today</span></div>
+      <p class="chart-note">Only days with a saved score are plotted.</p>`
+      : `<p class="empty-note">No scores yet. Your first review will appear here.</p>`}
+    </section>`;
+}
+
+function weeklyRecap(who, partner) {
+  const start = statsStart();
+  const monday = (date) => addDays(date, -((date.getDay() + 6) % 7));
+  const weeks = [];
+  const lastSunday = addDays(monday(parseDay(dayKey())), -1);
+  for (let date = monday(parseDay(start)); date <= lastSunday; date = addDays(date, 7)) {
+    weeks.push({ from: dayKey(date), to: dayKey(addDays(date, 6)) });
+  }
+  if (!weeks.length) return `<div class="section-title">Weekly recap</div>
+    <div class="card card-pad empty-note">Your first weekly recap appears after Sunday. No notification needed.</div>`;
+
+  const index = S.recapWeek === null ? weeks.length - 1 : clamp(S.recapWeek, 0, weeks.length - 1);
+  const week = weeks[index];
+  const member = S.recapMember === 'partner' && partner ? partner : who;
+  const previous = index > 0 ? weeks[index - 1] : null;
+  const recap = (range) => {
+    if (!range) return null;
+    const days = [];
+    for (let date = parseDay(range.from); dayKey(date) <= range.to; date = addDays(date, 1)) {
+      const day = dayKey(date);
+      if (day < start) continue;
+      const review = reviewFor(member.id, day);
+      const statuses = PRAYER_ORDER.map((key) => {
+        const prayer = getPrayer(member.id, day, key);
+        return prayer?.mosque ? 'mosque' : prayer?.status || 'pending';
+      });
+      days.push({ day, review, statuses });
+    }
+    const average = (field) => {
+      const values = days.map((d) => d.review?.[field]).filter(Number.isFinite);
+      return values.length ? values.reduce((sum, n) => sum + n, 0) / values.length : null;
+    };
+    const kept = days.reduce((n, d) => n + validPrayerCount(member.id, d.day), 0);
+    return { days, kept, total: days.length * 5, satisfaction: average('happiness'), productivity: average('productivity') };
+  };
+  const current = recap(week);
+  const prior = recap(previous);
+  const pct = (data) => data?.total ? Math.round(data.kept / data.total * 100) : 0;
+  const delta = (now, then, suffix = '') => {
+    if (now == null || then == null) return '<span class="recap-delta neutral">No previous score</span>';
+    const diff = now - then;
+    return `<span class="recap-delta ${diff > 0.04 ? 'up' : diff < -0.04 ? 'down' : 'neutral'}">${diff > 0.04 ? '↑ +' : diff < -0.04 ? '↓ ' : '→ '}${Math.abs(diff) < 0.05 ? '0' : Math.abs(diff).toFixed(1)}${suffix} vs prior week</span>`;
+  };
+  const score = (key, label) => `<div class="recap-score">
+    <span>${label}</span><b class="num">${current[key] == null ? '—' : current[key].toFixed(1)}<small>/10</small></b>
+    ${delta(current[key], prior?.[key])}
+  </div>`;
+  const dayCards = current.days.map(({ day, statuses }) => `
+    <button class="recap-day" data-act="streak-day" data-day="${day}" aria-label="${esc(dayLabel(day))}, ${validPrayerCount(member.id, day)} of 5 valid prayers; show full day">
+      <span>${parseDay(day).toLocaleDateString(LOCALE, { weekday: 'short' })}<small>${parseDay(day).getDate()}</small></span>
+      <span class="recap-marks">${statuses.map((state) => `<i class="${state}" title="${state === 'mosque' ? 'At the mosque' : STATUS_LABEL[state] || state}"></i>`).join('')}</span>
+      <b class="num">${validPrayerCount(member.id, day)}/5</b>
+    </button>`).join('');
+
+  return `<div class="section-title">Weekly recap</div>
+    <section class="card card-pad weekly-recap">
+      <div class="recap-nav">
+        <button data-act="recap-week" data-index="${index - 1}" aria-label="Previous week" ${index === 0 ? 'disabled' : ''}>‹</button>
+        <div><span>WEEK ${index + 1} OF ${weeks.length}</span><h2>${parseDay(week.from).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' })} – ${parseDay(week.to).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' })}</h2></div>
+        <button data-act="recap-week" data-index="${index + 1}" aria-label="Next week" ${index >= weeks.length - 1 ? 'disabled' : ''}>›</button>
+      </div>
+      ${partner ? `<div class="seg" role="group" aria-label="Whose weekly recap">
+        <button data-act="recap-person" data-person="mine" aria-pressed="${member.id === who.id}">Mine</button>
+        <button data-act="recap-person" data-person="partner" aria-pressed="${member.id === partner.id}">${esc(partner.name)}</button>
+      </div>` : ''}
+      <div class="recap-scores">${score('satisfaction', 'Satisfaction')}${score('productivity', 'Productivity')}</div>
+      <div class="recap-prayer-total">
+        <div><span>Prayers that counted</span><strong class="num">${current.kept}<small> / ${current.total}</small></strong></div>
+        <div><b class="num">${pct(current)}%</b>${prior ? delta(pct(current), pct(prior), '%') : '<span class="recap-delta neutral">First week</span>'}</div>
+      </div>
+      <div class="recap-day-list">${dayCards}</div>
+      <div class="recap-key"><i class="ontime"></i>On time <i class="mosque"></i>Mosque <i class="period"></i>Period <i class="late"></i>Late <i class="missed"></i>Missed</div>
+      ${weeks.length > 1 ? `<div class="recap-timeline"><span>Earlier weeks</span>
+        <div>${weeks.map((w, i) => `<button data-act="recap-week" data-index="${i}" aria-current="${i === index ? 'true' : 'false'}" aria-label="Week ${i + 1}, ${esc(w.to)}" title="${esc(w.from)} – ${esc(w.to)}"><i></i></button>`).join('')}</div>
+      </div>` : ''}
+    </section>`;
+}
+
+function dayHistory(who, partner) {
+  const today = dayKey();
+  const start = statsStart() > today ? today : statsStart();
+  const selected = S.historyDay && S.historyDay >= start && S.historyDay <= today ? S.historyDay : today;
+  const person = (member) => {
+    const review = reviewFor(member.id, selected);
+    const prayers = PRAYER_ORDER.map((key) => {
+      const rec = getPrayer(member.id, selected, key);
+      const state = rec?.status || 'pending';
+      return `<div class="history-prayer">
+        <span>${PMETA[key].name}</span>
+        <span class="pill ${state}"><span class="dot"></span>${STATUS_LABEL[state]}</span>
+        ${rec?.mosque ? `<small>${I.mosque} Mosque</small>` : ''}
+      </div>`;
+    }).join('');
+    return `<div class="history-person">
+      <div class="history-person-name"><span>${esc(member.avatar)}</span>${esc(member.name)}</div>
+      <div class="their-scores">
+        <div><span>Satisfaction</span><b class="num">${review?.happiness ?? '–'}</b><i>/10</i></div>
+        <div><span>Productivity</span><b class="num">${review?.productivity ?? '–'}</b><i>/10</i></div>
+      </div>
+      <div class="history-prayers">${prayers}</div>
+    </div>`;
+  };
+  return `
+    <div class="section-title">A day in full</div>
+    <section class="card card-pad day-history">
+      <div class="history-date">
+        <button data-act="history-prev" aria-label="Previous day" ${selected <= start ? 'disabled' : ''}>‹</button>
+        <label for="history-day">Day <input id="history-day" type="date" min="${start}" max="${today}" value="${selected}"></label>
+        <button data-act="history-next" aria-label="Next day" ${selected >= today ? 'disabled' : ''}>›</button>
+      </div>
+      ${person(who)}
+      ${partner ? person(partner) : ''}
+    </section>`;
 }
 
 /* ============================================================
@@ -1673,13 +1891,6 @@ function viewSettings() {
       <span class="txt"><span class="t">${title}</span>${desc ? `<span class="d" style="display:block">${desc}</span>` : ''}</span>
       ${value ? `<span class="v">${value}</span>` : ''}
       <span class="chev">›</span>
-    </button>`;
-
-  const toggle = (key, title, desc) => `
-    <button class="row" data-act="toggle" data-key="${key}">
-      <span class="ico">${I.bell}</span>
-      <span class="txt"><span class="t">${title}</span><span class="d" style="display:block">${desc}</span></span>
-      <span class="switch" role="switch" aria-checked="${!!S.settings.notif[key]}"></span>
     </button>`;
 
   return `
@@ -1711,13 +1922,6 @@ function viewSettings() {
       ${!S.settings.preset ? row('method', I.sliders, 'Calculation method', METHODS[S.settings.method]?.label || 'Muslim World League') : ''}
       ${row('location', I.pin, 'Location', S.settings.place, '')}
       ${row('times-today', I.clock, "Today's times", '', '')}
-    </div>
-
-    <div class="settings-label">Reminders</div>
-    <div class="group">
-      ${row('prayer-notifs', I.bell, 'Notifications', prayerNotifLine())}
-      ${toggle('review', 'Evening review', 'A prompt to close the day')}
-      ${toggle('partner', 'From your partner', 'Reactions and notes')}
     </div>
 
     <div class="settings-label">Appearance</div>
@@ -1800,7 +2004,6 @@ async function onRemoteChange() {
   if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) {
     S.pendingRemote = true;
     await loadState();
-    await deliverNudges();
     return;
   }
   applyRemoteChange();
@@ -1810,7 +2013,6 @@ async function applyRemoteChange() {
   S.pendingRemote = false;
   await loadState();
   await reconcileMembers();
-  await deliverNudges();
   S.suppressAnim = true;
   refresh();
   S.suppressAnim = false;
@@ -2387,8 +2589,53 @@ const VIEWS = {
   settings: viewSettings,
 };
 
+function pickScore(button) {
+  const control = button.closest('[data-score-control]');
+  if (!control) return;
+  const value = Number(button.dataset.score);
+  control.querySelector('input[type="hidden"]').value = value;
+  control.style.setProperty('--score', value);
+  control.querySelector('.score-value').textContent = value;
+  control.querySelector('.score-description').textContent = scoreDescription(value, control.dataset.scoreControl);
+  for (const option of control.querySelectorAll('[data-act="score-pick"]')) {
+    const number = Number(option.dataset.score);
+    option.setAttribute('aria-checked', String(number === value));
+    option.tabIndex = number === value ? 0 : -1;
+    option.classList.toggle('filled', number <= value);
+  }
+}
+
 const ACTIONS = {
   tab: (el) => go(el.dataset.view),
+  'score-pick': (el) => pickScore(el),
+  'trend-person': (el) => {
+    S.trendMember = el.dataset.person === 'partner' ? 'partner' : 'mine';
+    refresh();
+  },
+  'recap-person': (el) => {
+    S.recapMember = el.dataset.person === 'partner' ? 'partner' : 'mine';
+    refresh();
+  },
+  'recap-week': (el) => {
+    S.recapWeek = Number(el.dataset.index);
+    refresh();
+  },
+  'streak-day': (el) => {
+    S.historyDay = el.dataset.day;
+    if (S.view === 'review') refresh();
+    else go('review');
+    requestAnimationFrame(() => document.querySelector('.day-history')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  },
+  'history-prev': () => {
+    const current = S.historyDay || dayKey();
+    S.historyDay = dayKey(addDays(parseDay(current), -1));
+    refresh();
+  },
+  'history-next': () => {
+    const current = S.historyDay || dayKey();
+    S.historyDay = dayKey(addDays(parseDay(current), 1));
+    refresh();
+  },
   close: () => closeSheet(),
   'open-settings': () => go('settings'),
 
@@ -2793,6 +3040,25 @@ document.addEventListener('input', (e) => {
   range.style.setProperty('--p', range.value * 10);
   const val = range.closest('.slider')?.querySelector('.val');
   if (val) val.textContent = range.value;
+});
+
+document.addEventListener('change', (e) => {
+  if (e.target.id !== 'history-day') return;
+  const { min, max, value } = e.target;
+  if (value >= min && value <= max) S.historyDay = value;
+  refresh();
+});
+
+document.addEventListener('keydown', (e) => {
+  const option = e.target.closest('[data-act="score-pick"]');
+  if (!option) return;
+  const delta = { ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1 };
+  if (!(e.key in delta) && e.key !== 'Home' && e.key !== 'End') return;
+  e.preventDefault();
+  const next = e.key === 'Home' ? 0 : e.key === 'End' ? 10 : clamp(Number(option.dataset.score) + delta[e.key], 0, 10);
+  const target = option.closest('.score-choices').querySelector(`[data-score="${next}"]`);
+  pickScore(target);
+  target.focus();
 });
 
 document.addEventListener('submit', async (e) => {

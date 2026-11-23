@@ -3,6 +3,11 @@
 A private, installable app for two people: five daily prayers and a daily
 satisfaction/productivity review, each scored out of 10.
 
+The Review tab shows both people’s scores over time, a full day-by-day prayer
+history, and a completed-week recap with comparisons to earlier weeks. A prayer
+streak counts a day only when all five are on time, at the mosque, or marked
+period. The app does not send notifications.
+
 Vanilla JS. No framework, no build step, no dependencies. Data lives in
 IndexedDB on the device; the UI never waits on a network.
 

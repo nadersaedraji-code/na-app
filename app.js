@@ -11,7 +11,7 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '4.1.1';
+const APP_VERSION = '4.1.2';
 const LOCALE = 'en-GB';
 const FRESH_START_DAY = '2026-11-22';
 const FRESH_START_CUTOFF = Date.parse('2026-11-22T20:15:52Z');
@@ -21,6 +21,7 @@ const COUNTING_START_DAY = '2026-11-23';
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '4.1.2', at: '24 Nov 2026', notes: "Score choices stay selected during sync, and partner scores are clearer and update only when data changes." },
   { v: '4.1.1', at: '23 Nov 2026', notes: "Scores run from 1 to 10 on one row, and counting begins 23 November." },
   { v: '4.1.0', at: '23 Nov 2026', notes: "Prayer streaks, interactive daily scores and weekly recaps; notifications are off." },
   { v: '4.0.1', at: '22 Nov 2026', notes: "Counting starts today; old entries are cleared locally and from shared history when online." },
@@ -258,6 +259,7 @@ const S = {
   historyDay: null,
   recapMember: 'mine',
   recapWeek: null,
+  reviewDraft: null,
   planTab: 'mine',
   goalTab: 'mine',
   calMonth: null,
@@ -948,7 +950,14 @@ function render() {
 
 function refresh() {
   const y = window.scrollY;
+  const focusedScore = document.activeElement?.matches?.('[data-act="score-pick"]')
+    ? { field: document.activeElement.closest('[data-score-control]')?.dataset.scoreControl,
+        score: document.activeElement.dataset.score } : null;
   render();
+  if (focusedScore) {
+    document.querySelector(`[data-score-control="${focusedScore.field}"] [data-score="${focusedScore.score}"]`)
+      ?.focus({ preventScroll: true });
+  }
   requestAnimationFrame(() => window.scrollTo(0, y));
 }
 
@@ -1656,23 +1665,28 @@ function viewReview() {
   const mine = reviewFor(who.id, today);
   const theirs = p ? reviewFor(p.id, today) : null;
   const saved = !!mine;
+  const draft = S.reviewDraft?.memberId === who.id && S.reviewDraft?.day === today
+    ? S.reviewDraft : null;
 
   const metric = (label, a, b) => `
     <div class="metric">
       <span class="lab">${label}</span>
-      <b class="num">${displayedScore(a) ?? '–'}</b>
-      <b class="num">${displayedScore(b) ?? '–'}</b>
+      <b class="num">${displayedScore(a) ?? '–'}<small>/10</small></b>
+      <b class="num">${displayedScore(b) ?? '–'}<small>/10</small></b>
     </div>`;
 
   const compare = p ? `
     <div class="card compare">
+      <div class="compare-title">Today’s scores · ${esc(who.name)} &amp; ${esc(p.name)}</div>
       <div class="compare-head">
         <span></span>
-        <span class="you">You</span>
+        <span class="you">${esc(who.name)}</span>
         <span class="them">${esc(p.name)}</span>
       </div>
        ${metric('Satisfaction', mine?.happiness, theirs?.happiness)}
        ${metric('Productivity', mine?.productivity, theirs?.productivity)}
+       ${!sync.isOn() ? '<p class="compare-note">Pair your phones in Settings to see each other’s scores.</p>'
+         : !theirs ? `<p class="compare-note">${esc(p.name)} hasn’t saved a score for today yet. Past days are below.</p>` : ''}
     </div>
     <div style="height:14px"></div>` : '';
 
@@ -1689,8 +1703,8 @@ function viewReview() {
     ${compare}
 
     <form class="review-form" data-form="save-review">
-      ${scoreControl('happiness', 'Satisfaction', displayedScore(mine?.happiness) ?? 5, 'How happy did today feel?')}
-      ${scoreControl('productivity', 'Productivity', displayedScore(mine?.productivity) ?? 5, 'How much could you get done?')}
+       ${scoreControl('happiness', 'Satisfaction', draft?.happiness ?? displayedScore(mine?.happiness) ?? 5, 'How happy did today feel?')}
+       ${scoreControl('productivity', 'Productivity', draft?.productivity ?? displayedScore(mine?.productivity) ?? 5, 'How much could you get done?')}
       <div class="card card-pad">
        <button class="btn primary wide" type="submit">${saved ? 'Update today' : 'Save today'}</button>
        ${saved ? `<div style="text-align:center;font-size:12px;color:var(--ink-3);margin-top:10px">Saved · you can change it until the day ends</div>` : ''}
@@ -2014,10 +2028,9 @@ async function onRemoteChange() {
   const el = document.activeElement;
   if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) {
     S.pendingRemote = true;
-    await loadState();
     return;
   }
-  applyRemoteChange();
+  await applyRemoteChange();
 }
 
 async function applyRemoteChange() {
@@ -2605,6 +2618,13 @@ function pickScore(button) {
   if (!control) return;
   const value = Number(button.dataset.score);
   control.querySelector('input[type="hidden"]').value = value;
+  const form = control.closest('[data-form="save-review"]');
+  S.reviewDraft = {
+    memberId: actor().id,
+    day: dayKey(),
+    happiness: Number(form.elements.happiness.value),
+    productivity: Number(form.elements.productivity.value),
+  };
   control.style.setProperty('--score', value);
   control.querySelector('.score-value').textContent = value;
   control.querySelector('.score-description').textContent = scoreDescription(value, control.dataset.scoreControl);
@@ -3096,6 +3116,7 @@ document.addEventListener('submit', async (e) => {
       demo: false,
     };
     await saveReview(rec);
+    S.reviewDraft = null;
     haptic(14);
     refresh();
     toast('Saved · today is kept');

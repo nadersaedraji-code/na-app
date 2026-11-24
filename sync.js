@@ -16,6 +16,7 @@ let lastSync = null;
 let pollTimer = null;
 let pushTimer = null;
 let busy = false;
+let pulling = false;
 let queue = emptyQueue();
 let onChange = null;
 let onStatus = null;
@@ -283,13 +284,21 @@ export async function flush() {
   const payload = buildPayload();
   if (!payload) return true;
 
+  const sent = Object.fromEntries(
+    ['prayers', 'plan', 'reviews', 'reactions', 'members', 'goals', 'cycles', 'nudges', 'joy']
+      .map((kind) => [kind, new Map(queue[kind])])
+  );
+  let pushed = false;
   busy = true;
   setState('syncing');
   try {
     await rpc('na_push', { p_key: cfg.key, p_data: payload });
+    pushed = true;
     // only clear what we actually sent
     for (const k of ['prayers', 'plan', 'reviews', 'reactions', 'members', 'goals', 'cycles', 'nudges', 'joy']) {
-      for (const row of payload[k]) queue[k].delete(row.id);
+      for (const row of payload[k]) {
+        if (queue[k].get(row.id) === sent[k].get(row.id)) queue[k].delete(row.id);
+      }
     }
     for (const d of payload.deletes) queue.deletes.delete(`${d.kind}:${d.id}`);
     persistQueue();
@@ -302,12 +311,22 @@ export async function flush() {
     return false;
   } finally {
     busy = false;
+    if (pushed && buildPayload()) schedulePush();
   }
 }
 
 /* ---------- pull ---------- */
 export async function pull() {
-  if (!cfg) return null;
+  if (!cfg || pulling) return null;
+  pulling = true;
+  try {
+    return await pullOnce();
+  } finally {
+    pulling = false;
+  }
+}
+
+async function pullOnce() {
   const reset = (await db.get('meta', 'history-reset'))?.value;
   if (reset?.pending && !(await finishHistoryReset(reset.cutoff, reset.resetDay))) return null;
   setState('syncing');
@@ -315,6 +334,7 @@ export async function pull() {
     const since = lastSync || '1970-01-01T00:00:00.000Z';
     const data = await rpc('na_pull', { p_key: cfg.key, p_since: since });
 
+    let changed = false;
     await db.mute(async () => {
       for (const kind of ['members', 'prayers', 'plan', 'reviews', 'reactions', 'goals', 'cycles', 'nudges', 'joy']) {
         for (const w of data[kind] || []) {
@@ -323,19 +343,30 @@ export async function pull() {
             queueDelete(kind, w.id);
             continue;
           }
+          if (queue[kind].has(w.id) || queue.deletes.has(`${kind}:${w.id}`)) continue;
           const row = fromWire(kind, w);
-          if (row) await db.put(kind, row);
+          if (!row) continue;
+          const existing = await db.get(kind, row.id);
+          if (existing?.updatedAt > row.updatedAt) continue;
+          if (existing?.updatedAt === row.updatedAt && JSON.stringify(existing) === JSON.stringify(row)) continue;
+          await db.put(kind, row);
+          changed = true;
         }
       }
       for (const d of data.deletes || []) {
-        if (SYNCED.has(d.kind)) await db.del(d.kind, d.id);
+        if (SYNCED.has(d.kind) && !queue[d.kind].has(d.id)) {
+          if (await db.get(d.kind, d.id)) {
+            await db.del(d.kind, d.id);
+            changed = true;
+          }
+        }
       }
     });
 
     lastSync = data.server_time || new Date().toISOString();
     await db.put('meta', { key: 'sync', value: { ...cfg, lastSync } });
     setState('live');
-    onChange?.();
+    if (changed) onChange?.();
     return data;
   } catch (err) {
     console.warn('pull failed', err.message);
@@ -387,10 +418,16 @@ export async function begin(member) {
 export function startPolling() {
   clearInterval(pollTimer);
   pollTimer = setInterval(() => {
-    if (document.visibilityState === 'visible') pull();
+    if (document.visibilityState === 'visible') {
+      if (buildPayload()) flush();
+      pull();
+    }
   }, 3000);
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') pull();
+    if (document.visibilityState === 'visible') {
+      if (buildPayload()) flush();
+      pull();
+    }
   });
   flush();
 }

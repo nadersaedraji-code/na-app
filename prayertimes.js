@@ -1,7 +1,6 @@
 /* ============================================================
-   Prayer times — computed on-device, no network, no API key.
-   Based on the standard solar equations used by most
-   calculation methods (declination, equation of time, hour angle).
+   Prayer times — the mosque's published calendar for Cluj, or
+   standard solar calculations when a published row is unavailable.
    ============================================================ */
 
 const D2R = Math.PI / 180;
@@ -15,13 +14,22 @@ const atan = (x) => Math.atan(x) * R2D;
 
 import { CLUJ_YEAR, CLUJ_2026 } from './cluj-times.js';
 
-/* The mosque's own display runs a few minutes from its published
-   calendar: Fajr and Shuruq a touch earlier, the rest slightly later. */
-const CLUJ_SHIFT = { fajr: -5, shuruq: -6, dhuhr: 0, asr: 3, maghrib: 5, isha: 3 };
+export const CLUJ_TIME_ZONE = 'Europe/Bucharest';
+const clujClock = new Intl.DateTimeFormat('en-GB', {
+  timeZone: CLUJ_TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+});
 
-function at(date, hhmm, shift = 0) {
+// Turn a mosque wall-clock time into an instant, regardless of the phone's zone.
+function clujAt(date, hhmm) {
   const [h, m] = hhmm.split(':').map(Number);
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), h, m + shift);
+  const wall = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), h, m);
+  let instant = wall;
+  for (let i = 0; i < 2; i++) {
+    const p = Object.fromEntries(clujClock.formatToParts(instant).map(({ type, value }) => [type, +value]));
+    instant += wall - Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute);
+  }
+  return new Date(instant);
 }
 
 /** Times exactly as Masjid Cluj-Napoca publishes them on Mawaqit. */
@@ -32,14 +40,14 @@ function mosqueTimes(date, preset) {
   if (!row) return null;
 
   const [fajr, shuruq, dhuhr, asr, maghrib, isha] = row.split(' ');
-  const m = at(date, maghrib, CLUJ_SHIFT.maghrib);
+  const m = clujAt(date, maghrib);
   return {
-    fajr: at(date, fajr, CLUJ_SHIFT.fajr),
-    sunrise: at(date, shuruq, CLUJ_SHIFT.shuruq),
-    dhuhr: at(date, dhuhr, CLUJ_SHIFT.dhuhr),
-    asr: at(date, asr, CLUJ_SHIFT.asr),
+    fajr: clujAt(date, fajr),
+    sunrise: clujAt(date, shuruq),
+    dhuhr: clujAt(date, dhuhr),
+    asr: clujAt(date, asr),
     maghrib: m,
-    isha: at(date, isha, CLUJ_SHIFT.isha),
+    isha: clujAt(date, isha),
     sunset: m,
   };
 }
@@ -97,10 +105,15 @@ function roundMinute(date) {
   return new Date(Math.round(date.getTime() / 60000) * 60000);
 }
 
-function compute(date, { lat, lng, method = 'MWL' }) {
+function compute(date, { lat, lng, method = 'MWL', cluj = false }) {
   const m = METHODS[method] || METHODS.MWL;
-  const { decl, eqTime } = solar(date);
-  const tz = -date.getTimezoneOffset() / 60;
+  const wallNoon = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), 12);
+  const localNoon = cluj ? clujAt(date, '12:00') : date;
+  const { decl, eqTime } = solar(localNoon);
+  const tz = cluj ? (wallNoon - localNoon.getTime()) / 3600000 : -date.getTimezoneOffset() / 60;
+  const atHour = (hour) => cluj
+    ? new Date(wallNoon + (hour - 12 - tz) * 3600000)
+    : offsetHours(date, hour);
 
   // solar noon, in local clock hours
   const noon = 12 + tz - lng / 15 - eqTime;
@@ -115,18 +128,18 @@ function compute(date, { lat, lng, method = 'MWL' }) {
   const tAsr = hourAngle(asrAlt, lat, decl);
 
   const halfDay = tSun != null ? tSun : 6;
-  const sunrise = roundMinute(offsetHours(date, noon - halfDay));
-  const sunset = roundMinute(offsetHours(date, noon + halfDay));
+  const sunrise = roundMinute(atHour(noon - halfDay));
+  const sunset = roundMinute(atHour(noon + halfDay));
 
   let fajr;
-  if (tFajr != null) fajr = roundMinute(offsetHours(date, noon - tFajr));
+  if (tFajr != null) fajr = roundMinute(atHour(noon - tFajr));
   else fajr = new Date(sunrise.getTime() - 80 * 60000); // high-latitude fallback
 
   let isha;
   if (typeof m.isha === 'number' && m.isha >= 60) {
     isha = new Date(sunset.getTime() + m.isha * 60000); // Umm al-Qura interval
   } else if (tIsha != null) {
-    isha = roundMinute(offsetHours(date, noon + tIsha));
+    isha = roundMinute(atHour(noon + tIsha));
   } else {
     isha = new Date(sunset.getTime() + 80 * 60000);
   }
@@ -134,8 +147,8 @@ function compute(date, { lat, lng, method = 'MWL' }) {
   return {
     fajr,
     sunrise,
-    dhuhr: roundMinute(offsetHours(date, noon + 1 / 60)),
-    asr: tAsr != null ? roundMinute(offsetHours(date, noon + tAsr)) : roundMinute(offsetHours(date, noon + 3.5)),
+    dhuhr: roundMinute(atHour(noon + 1 / 60)),
+    asr: tAsr != null ? roundMinute(atHour(noon + tAsr)) : roundMinute(atHour(noon + 3.5)),
     maghrib: roundMinute(new Date(sunset.getTime() + 60000)),
     isha,
     sunset,
@@ -148,18 +161,23 @@ function compute(date, { lat, lng, method = 'MWL' }) {
  */
 export function dayTimes(input, settings) {
   const date = toDate(input);
-  const opts = { lat: settings.lat, lng: settings.lng, method: settings.method };
   const preset = settings.preset;
-  const t = mosqueTimes(date, preset) || compute(date, opts);
+  const cluj = preset === 'cluj';
+  const opts = { lat: settings.lat, lng: settings.lng, method: settings.method, cluj };
+  const published = mosqueTimes(date, preset);
+  const t = published || compute(date, opts);
 
   const next = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1, 12, 0, 0);
-  const tNext = mosqueTimes(next, preset) || compute(next, opts);
+  const nextPublished = mosqueTimes(next, preset);
+  const tNext = nextPublished || compute(next, opts);
 
-  const midnight = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1, 0, 0, 0);
+  const midnight = cluj ? clujAt(next, '00:00') : new Date(next.getFullYear(), next.getMonth(), next.getDate());
 
   return {
     ...t,
+    source: published ? 'mawaqit' : 'calculated',
     nextFajr: tNext.fajr,
+    nextFajrSource: nextPublished ? 'mawaqit' : 'calculated',
     onTimeEnd: {
       fajr: t.sunrise,
       dhuhr: t.asr,
@@ -192,8 +210,8 @@ export function nextPrayer(info, now = new Date()) {
   return { key: 'fajr', at: info.nextFajr, tomorrow: true };
 }
 
-export function fmtTime(date) {
-  return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+export function fmtTime(date, timeZone) {
+  return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', ...(timeZone ? { timeZone, hourCycle: 'h23' } : {}) });
 }
 
 export function fmtCountdown(ms) {

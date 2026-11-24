@@ -8,6 +8,11 @@ history, and a completed-week recap with comparisons to earlier weeks. A prayer
 streak counts a day only when all five are on time, combined, at the mosque,
 or marked period. The app does not send notifications.
 
+Choose **Settings → Prayer times → Masjid Cluj-Napoca** to use the mosque’s
+[published Mawaqit timetable](https://mawaqit.net/en/m/masjid-cluj-napoca-400338-romania).
+It shows Cluj local time without extra offsets. The bundled timetable covers 2026;
+dates without a published entry are labeled as calculated.
+
 To correct a past entry, select its date under **Review → A day in full**.
 You can edit your own scores and prayers; your partner’s entries are read-only.
 

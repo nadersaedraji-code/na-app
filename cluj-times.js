@@ -1,6 +1,7 @@
 /* Masjid Cluj-Napoca — the yearly timetable published on Mawaqit (mosque #10813).
    Order: Fajr, Shuruq, Dhuhr, Asr, Maghrib, Isha.
-   Used verbatim, then shifted by the mosque’s own display offsets. */
+   Used verbatim, in Europe/Bucharest, with no added offsets.
+   Source: https://mawaqit.net/en/m/masjid-cluj-napoca-400338-romania */
 
 export const CLUJ_YEAR = 2026;
 

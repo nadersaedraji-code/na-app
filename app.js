@@ -9,10 +9,10 @@ import * as sync from './sync.js';
 import { dailyVerse } from './verses.js';
 import { BACKEND } from './config.js';
 import {
-  METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
+  METHODS, PRAYER_ORDER, CLUJ_TIME_ZONE, dayTimes, suggest, nextPrayer, fmtTime as formatPrayerTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '4.2.1';
+const APP_VERSION = '4.2.2';
 const LOCALE = 'en-GB';
 const FRESH_START_DAY = '2026-11-22';
 const FRESH_START_CUTOFF = Date.parse('2026-11-22T20:15:52Z');
@@ -22,6 +22,7 @@ const COUNTING_START_DAY = '2026-11-23';
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '4.2.2', at: '24 Nov 2026', notes: "Use Masjid Cluj-Napoca’s published Mawaqit times without extra offsets, in Cluj local time." },
   { v: '4.2.1', at: '24 Nov 2026', notes: "Combined prayers can be logged and count toward your streak." },
   { v: '4.2.0', at: '24 Nov 2026', notes: "A daily Qur’an verse in English greets you on the first open of the day." },
   { v: '4.1.5', at: '24 Nov 2026', notes: "Recover missed partner scores and keep score saves queued during sync." },
@@ -380,6 +381,13 @@ const times = (day) => {
   if (!timeCache.has(day)) timeCache.set(day, dayTimes(day, S.settings));
   return timeCache.get(day);
 };
+const clujSelected = () => S.settings.preset === 'cluj';
+const fmtTime = (date) => formatPrayerTime(date, clujSelected() ? CLUJ_TIME_ZONE : undefined);
+const CLUJ_MAWAQIT_URL = 'https://mawaqit.net/en/m/masjid-cluj-napoca-400338-romania';
+const timingSource = (info) => info.source === 'mawaqit'
+  ? 'Masjid Cluj-Napoca · Mawaqit'
+  : clujSelected() ? 'Calculated · no published Cluj timetable for this date'
+    : `Calculated · ${METHODS[S.settings.method]?.label || ''}`;
 
 const isDue = (day, key) => {
   if (day !== dayKey()) return true;
@@ -1606,6 +1614,7 @@ function viewPrayer() {
     <div class="card hero">
       ${ring}
       <div class="hero-copy">
+        ${clujSelected() ? `<div class="next-meta">${(np.tomorrow ? t.nextFajrSource : t.source) === 'mawaqit' ? 'Mawaqit · Cluj local time' : 'Calculated · Cluj local time'}</div>` : ''}
         <div class="next-label">${np.tomorrow ? 'Tomorrow' : 'Next'}</div>
         <div class="next-name">${PMETA[np.key].name} <span class="num" style="color:var(--ink-2);font-size:17px;font-weight:500">${fmtTime(np.at)}</span></div>
         <div class="next-meta num">in <b>${fmtCountdown(np.at - new Date())}</b>${np.tomorrow ? ' · new day' : ''}</div>
@@ -1952,7 +1961,7 @@ function viewSettings() {
 
     <div class="settings-label">Faith &amp; place</div>
     <div class="group">
-      ${row('source', I.mosque, 'Prayer times', S.settings.preset === 'cluj' ? 'Masjid Cluj-Napoca · Mawaqit' : `Calculated · ${METHODS[S.settings.method]?.label || ''}`)}
+      ${row('source', I.mosque, 'Prayer times', timingSource(times(dayKey())))}
       ${!S.settings.preset ? row('method', I.sliders, 'Calculation method', METHODS[S.settings.method]?.label || 'Muslim World League') : ''}
       ${row('location', I.pin, 'Location', S.settings.place, '')}
       ${row('times-today', I.clock, "Today's times", '', '')}
@@ -2434,7 +2443,7 @@ function sheetSource() {
     <div class="sheet-list">
       <button class="sheet-opt" data-act="pick-preset" data-preset="cluj" ${isCluj ? 'data-active="true"' : ''}>
         <span class="sw" style="background:var(--ok)"></span>
-        <span class="lbl">Masjid Cluj-Napoca<span class="sub">Mawaqit timetable — the mosque's own times</span></span>
+        <span class="lbl">Masjid Cluj-Napoca<span class="sub">Mawaqit timetable · Cluj local time</span></span>
         ${isCluj ? '✓' : ''}
       </button>
       <button class="sheet-opt" data-act="pick-preset" data-preset="" ${!isCluj ? 'data-active="true"' : ''}>
@@ -2443,6 +2452,7 @@ function sheetSource() {
         ${!isCluj ? '✓' : ''}
       </button>
     </div>
+    <p class="sheet-sub" style="margin:14px 0 0"><a href="${CLUJ_MAWAQIT_URL}" target="_blank" rel="noopener noreferrer">View the official Cluj mosque timetable on Mawaqit</a></p>
   `);
 }
 
@@ -2451,7 +2461,7 @@ function sheetTimes() {
   openSheet(`
     <div class="grip"></div>
     <h3>Today</h3>
-    <p class="sheet-sub num">${S.settings.place} · ${METHODS[S.settings.method]?.label}</p>
+    <p class="sheet-sub num">${esc(timingSource(t))}</p>
     <div class="sheet-list">
       ${PRAYER_ORDER.map((k) => `
         <div class="sheet-opt" style="cursor:default">

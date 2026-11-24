@@ -11,7 +11,7 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '4.1.4';
+const APP_VERSION = '4.1.5';
 const LOCALE = 'en-GB';
 const FRESH_START_DAY = '2026-11-22';
 const FRESH_START_CUTOFF = Date.parse('2026-11-22T20:15:52Z');
@@ -21,6 +21,7 @@ const COUNTING_START_DAY = '2026-11-23';
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '4.1.5', at: '24 Nov 2026', notes: "Recover missed partner scores and keep score saves queued during sync." },
   { v: '4.1.4', at: '24 Nov 2026', notes: "Make Edit buttons visible in daily history and add an Edit past entries shortcut." },
   { v: '4.1.3', at: '24 Nov 2026', notes: "Edit your own past scores and prayers from Review." },
   { v: '4.1.2', at: '24 Nov 2026', notes: "Score choices stay selected during sync, and partner scores are clearer and update only when data changes." },
@@ -1898,7 +1899,7 @@ function dayHistory(who, partner) {
   };
   return `
     <div class="section-title">A day in full</div>
-    <section class="card card-pad day-history">
+    <section class="card card-pad day-history" tabindex="-1" aria-label="A day in full">
       <div class="history-date">
         <button data-act="history-prev" aria-label="Previous day" ${selected <= start ? 'disabled' : ''}>‹</button>
         <label for="history-day">Day <input id="history-day" type="date" min="${start}" max="${today}" value="${selected}"></label>
@@ -2192,17 +2193,15 @@ async function reconcileMembers() {
 
 /** Remove a placeholder member and everything that belonged to it. */
 async function retireMember(id) {
-  await db.mute(async () => {
-    for (const store of ['prayers', 'plan', 'reviews']) {
-      for (const row of await db.getAll(store)) {
-        if (row.memberId === id) await db.del(store, row.id);
-      }
+  for (const store of ['prayers', 'plan', 'reviews']) {
+    for (const row of await db.getAll(store)) {
+      if (row.memberId === id) await db.del(store, row.id, { remote: true });
     }
-    for (const row of await db.getAll('reactions')) {
-      if (row.from === id) await db.del('reactions', row.id);
-    }
-    await db.del('members', id);
-  });
+  }
+  for (const row of await db.getAll('reactions')) {
+    if (row.from === id) await db.del('reactions', row.id, { remote: true });
+  }
+  await db.del('members', id, { remote: true });
   S.members = S.members.filter((m) => m.id !== id);
   S.prayers = S.prayers.filter((r) => r.memberId !== id);
   S.plan = S.plan.filter((r) => r.memberId !== id);
@@ -2702,9 +2701,9 @@ const ACTIONS = {
       refresh();
     }
     requestAnimationFrame(() => {
-      const date = $('#history-day');
-      date?.focus({ preventScroll: true });
-      $('.day-history')?.scrollIntoView({ block: 'start' });
+      const history = $('.day-history');
+      history?.focus({ preventScroll: true });
+      history?.scrollIntoView({ block: 'start' });
     });
   },
   'edit-past-review': (el) => {
@@ -3131,7 +3130,8 @@ document.addEventListener('change', (e) => {
   if (e.target.id !== 'history-day') return;
   const { min, max, value } = e.target;
   if (value >= min && value <= max) S.historyDay = value;
-  refresh();
+  if (S.pendingRemote) applyRemoteChange();
+  else refresh();
 });
 
 document.addEventListener('keydown', (e) => {

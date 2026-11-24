@@ -9,6 +9,8 @@ import * as db from './db.js';
 
 const SYNCED = new Set(['prayers', 'plan', 'reviews', 'reactions', 'members', 'goals', 'cycles', 'nudges', 'joy']);
 const QUEUE_KEY = 'na:queue';
+const EPOCH = '1970-01-01T00:00:00.000Z';
+const PULL_OVERLAP_MS = 30_000;
 export const HISTORY_STORES = ['prayers', 'plan', 'reviews', 'reactions', 'goals', 'cycles', 'nudges', 'joy'];
 
 let cfg = null;            // { mode, key, base?, url?, apikey?, lastSync? }
@@ -40,14 +42,17 @@ export async function load() {
   const value = row?.value || null;
   if (value && value.key) {
     cfg = { ...value };
-    lastSync = value.lastSync || null;
+    // Earlier clients could skip rows by advancing the pull cursor on push.
+    lastSync = value.pullCursorFixed ? value.lastSync || null : null;
     restoreQueue();
   }
   return cfg;
 }
 
 export async function setConfig(next) {
-  cfg = { ...next, lastSync: cfg?.lastSync || null };
+  const sameSpace = cfg?.key === next.key && cfg?.mode === next.mode && cfg?.url === next.url;
+  if (!sameSpace) lastSync = null;
+  cfg = { ...next, lastSync, pullCursorFixed: !!lastSync };
   await db.put('meta', { key: 'sync', value: cfg });
 }
 
@@ -303,7 +308,6 @@ export async function flush() {
     for (const d of payload.deletes) queue.deletes.delete(`${d.kind}:${d.id}`);
     persistQueue();
     setState('live');
-    lastSync = new Date().toISOString();
     return true;
   } catch (err) {
     console.warn('push failed', err.message);
@@ -331,40 +335,48 @@ async function pullOnce() {
   if (reset?.pending && !(await finishHistoryReset(reset.cutoff, reset.resetDay))) return null;
   setState('syncing');
   try {
-    const since = lastSync || '1970-01-01T00:00:00.000Z';
+    const cursor = Date.parse(lastSync);
+    // Replay a short window to catch writes stamped just before the pull
+    // snapshot but committed just after it.
+    const since = Number.isFinite(cursor) ? new Date(cursor - PULL_OVERLAP_MS).toISOString() : EPOCH;
     const data = await rpc('na_pull', { p_key: cfg.key, p_since: since });
 
     let changed = false;
-    await db.mute(async () => {
-      for (const kind of ['members', 'prayers', 'plan', 'reviews', 'reactions', 'goals', 'cycles', 'nudges', 'joy']) {
-        for (const w of data[kind] || []) {
-          if (w.deleted_at) continue;
-          if (reset && HISTORY_STORES.includes(kind) && oldHistoryRow(w, reset.cutoff, reset.resetDay)) {
-            queueDelete(kind, w.id);
-            continue;
-          }
-          if (queue[kind].has(w.id) || queue.deletes.has(`${kind}:${w.id}`)) continue;
-          const row = fromWire(kind, w);
-          if (!row) continue;
-          const existing = await db.get(kind, row.id);
-          if (existing?.updatedAt > row.updatedAt) continue;
-          if (existing?.updatedAt === row.updatedAt && JSON.stringify(existing) === JSON.stringify(row)) continue;
-          await db.put(kind, row);
-          changed = true;
+    const live = new Set();
+    const viewerId = (await db.get('meta', 'app'))?.value?.viewerId;
+    for (const kind of SYNCED) {
+      for (const w of data[kind] || []) {
+        if (w.deleted_at) continue;
+        if (reset && HISTORY_STORES.includes(kind) && oldHistoryRow(w, reset.cutoff, reset.resetDay)) {
+          queueDelete(kind, w.id);
+          continue;
         }
+        const key = `${kind}:${w.id}`;
+        live.add(key);
+        const row = fromWire(kind, w);
+        if (!row) continue;
+        const existing = await db.get(kind, row.id);
+        if (queue[kind].has(w.id) || queue.deletes.has(key)) continue;
+        const partnerScore = kind === 'reviews' && viewerId && row.memberId !== viewerId;
+        if (!partnerScore && existing?.updatedAt > row.updatedAt) continue;
+        if (existing?.updatedAt === row.updatedAt && JSON.stringify(existing) === JSON.stringify(row)) continue;
+        await db.put(kind, row, { remote: true });
+        changed = true;
       }
-      for (const d of data.deletes || []) {
-        if (SYNCED.has(d.kind) && !queue[d.kind].has(d.id)) {
-          if (await db.get(d.kind, d.id)) {
-            await db.del(d.kind, d.id);
-            changed = true;
-          }
-        }
+    }
+    for (const d of data.deletes || []) {
+      // An older tombstone must not undo a row recreated on the server.
+      if (!SYNCED.has(d.kind) || live.has(`${d.kind}:${d.id}`)) continue;
+      if (await db.get(d.kind, d.id) && !queue[d.kind].has(d.id)) {
+        await db.del(d.kind, d.id, { remote: true });
+        changed = true;
       }
-    });
+    }
 
-    lastSync = data.server_time || new Date().toISOString();
-    await db.put('meta', { key: 'sync', value: { ...cfg, lastSync } });
+    if (data.server_time) {
+      lastSync = data.server_time;
+      await db.put('meta', { key: 'sync', value: { ...cfg, lastSync, pullCursorFixed: true } });
+    }
     setState('live');
     if (changed) onChange?.();
     return data;

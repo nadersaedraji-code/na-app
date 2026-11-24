@@ -11,7 +11,7 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '4.1.3';
+const APP_VERSION = '4.1.4';
 const LOCALE = 'en-GB';
 const FRESH_START_DAY = '2026-11-22';
 const FRESH_START_CUTOFF = Date.parse('2026-11-22T20:15:52Z');
@@ -21,6 +21,7 @@ const COUNTING_START_DAY = '2026-11-23';
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '4.1.4', at: '24 Nov 2026', notes: "Make Edit buttons visible in daily history and add an Edit past entries shortcut." },
   { v: '4.1.3', at: '24 Nov 2026', notes: "Edit your own past scores and prayers from Review." },
   { v: '4.1.2', at: '24 Nov 2026', notes: "Score choices stay selected during sync, and partner scores are clearer and update only when data changes." },
   { v: '4.1.1', at: '23 Nov 2026', notes: "Scores run from 1 to 10 on one row, and counting begins 23 November." },
@@ -317,9 +318,10 @@ function verseCard() {
 
 /** Calculations begin on this date. Set at onboarding, editable in Settings. */
 const statsStart = () => S.settings.startDate || dayKey();
-const canEditPastDay = (day) =>
+const canEditHistoryDay = (day) =>
   !isPreview() && !!me() && /^\d{4}-\d{2}-\d{2}$/.test(day)
-  && day >= statsStart() && day < dayKey() && dayKey(parseDay(day)) === day;
+  && (day === dayKey() || (day >= statsStart() && day < dayKey()))
+  && dayKey(parseDay(day)) === day;
 
 async function ensureStartDate() {
   if (S.settings.startDate) return;
@@ -1698,6 +1700,8 @@ function viewReview() {
 
     ${compare}
 
+    ${!isPreview() ? '<button class="btn ghost wide history-shortcut" type="button" data-act="edit-history">Edit past entries</button>' : ''}
+
     <form class="review-form" data-form="save-review">
        ${reviewControls(mine, draft)}
       <div class="card card-pad">
@@ -1869,7 +1873,7 @@ function dayHistory(who, partner) {
   const start = statsStart() > today ? today : statsStart();
   const selected = S.historyDay && S.historyDay >= start && S.historyDay <= today ? S.historyDay : today;
   const person = (member) => {
-    const editable = member.id === S.viewerId && canEditPastDay(selected);
+    const editable = member.id === S.viewerId && canEditHistoryDay(selected);
     const review = reviewFor(member.id, selected);
     const prayers = PRAYER_ORDER.map((key) => {
       const rec = getPrayer(member.id, selected, key);
@@ -1883,7 +1887,7 @@ function dayHistory(who, partner) {
     }).join('');
     return `<div class="history-person">
       <div class="history-person-name"><span>${esc(member.avatar)}</span>${esc(member.name)}
-        ${editable ? `<button type="button" class="history-edit" data-act="edit-past-review" data-day="${selected}">${review ? 'Edit scores' : 'Add scores'}</button>` : ''}
+        ${editable ? `<button type="button" class="history-edit" data-act="edit-past-review" data-day="${selected}">Edit scores</button>` : ''}
       </div>
       <div class="their-scores">
         <div><span>Satisfaction</span><b class="num">${displayedScore(review?.happiness) ?? '–'}</b><i>/10</i></div>
@@ -1900,6 +1904,7 @@ function dayHistory(who, partner) {
         <label for="history-day">Day <input id="history-day" type="date" min="${start}" max="${today}" value="${selected}"></label>
         <button data-act="history-next" aria-label="Next day" ${selected >= today ? 'disabled' : ''}>›</button>
       </div>
+      <p class="compare-note">${isPreview() ? 'Exit preview to edit your own entries.' : 'Choose a date, then use the Edit buttons by your name and prayers.'}</p>
       ${person(who)}
       ${partner ? person(partner) : ''}
     </section>`;
@@ -2268,12 +2273,13 @@ function closeSheet(instant = false) {
 
 function sheetPastReview(day) {
   const review = reviewFor(me().id, day);
+  const draft = S.reviewDraft?.memberId === me().id && S.reviewDraft?.day === day ? S.reviewDraft : null;
   openSheet(`
     <div class="grip"></div>
     <h3>${review ? 'Edit' : 'Add'} scores</h3>
     <p class="sheet-sub">${esc(dayLabel(day))}</p>
     <form class="review-form" data-form="save-review" data-day="${day}">
-      ${reviewControls(review)}
+      ${reviewControls(review, draft)}
       <button class="btn primary wide" type="submit">Save scores</button>
       <button class="btn ghost wide" type="button" data-act="close">Cancel</button>
     </form>
@@ -2689,11 +2695,23 @@ const ACTIONS = {
     S.historyDay = dayKey(addDays(parseDay(current), 1));
     refresh();
   },
+  'edit-history': () => {
+    const yesterday = dayKey(addDays(parseDay(dayKey()), -1));
+    if ((!S.historyDay || S.historyDay === dayKey()) && canEditHistoryDay(yesterday)) {
+      S.historyDay = yesterday;
+      refresh();
+    }
+    requestAnimationFrame(() => {
+      const date = $('#history-day');
+      date?.focus({ preventScroll: true });
+      $('.day-history')?.scrollIntoView({ block: 'start' });
+    });
+  },
   'edit-past-review': (el) => {
-    if (canEditPastDay(el.dataset.day)) sheetPastReview(el.dataset.day);
+    if (canEditHistoryDay(el.dataset.day)) sheetPastReview(el.dataset.day);
   },
   'edit-past-prayer': (el) => {
-    if (canEditPastDay(el.dataset.day)) sheetStatus(el.dataset.key, el.dataset.day);
+    if (canEditHistoryDay(el.dataset.day)) sheetStatus(el.dataset.key, el.dataset.day);
   },
   close: () => closeSheet(),
   'open-settings': () => go('settings'),
@@ -2702,7 +2720,7 @@ const ACTIONS = {
 
   'set-status': async (el) => {
     const { key, status, day: pastDay } = el.dataset;
-    if (pastDay && !canEditPastDay(pastDay)) return;
+    if (pastDay && !canEditHistoryDay(pastDay)) return;
     const who = actor();
     el.closest('.sheet-opt')?.classList.add('pop');
     await savePrayer(who.id, pastDay || dayKey(), key, status);
@@ -2716,7 +2734,7 @@ const ACTIONS = {
 
   'toggle-mosque': async (el) => {
     const { key, day: pastDay } = el.dataset;
-    if (pastDay && !canEditPastDay(pastDay)) return;
+    if (pastDay && !canEditHistoryDay(pastDay)) return;
     const who = actor();
     const day = pastDay || dayKey();
     const rec = getPrayer(who.id, day, key);
@@ -2750,7 +2768,7 @@ const ACTIONS = {
 
   'clear-status': async (el) => {
     const { key, day: pastDay } = el.dataset;
-    if (pastDay && !canEditPastDay(pastDay)) return;
+    if (pastDay && !canEditHistoryDay(pastDay)) return;
     const who = actor();
     const id = getPrayer(who.id, pastDay || dayKey(), key)?.id;
     if (!id) return;
@@ -3138,7 +3156,7 @@ document.addEventListener('submit', async (e) => {
 
   if (kind === 'save-review') {
     const pastDay = form.dataset.day;
-    if (pastDay && !canEditPastDay(pastDay)) return;
+    if (pastDay && !canEditHistoryDay(pastDay)) return;
     const who = actor();
     const day = pastDay || dayKey();
     const existing = reviewFor(who.id, day);
@@ -3155,7 +3173,7 @@ document.addEventListener('submit', async (e) => {
     };
     await saveReview(rec);
     if (pastDay) closeSheet();
-    else S.reviewDraft = null;
+    if (S.reviewDraft?.memberId === who.id && S.reviewDraft?.day === day) S.reviewDraft = null;
     haptic(14);
     refresh();
     toast(pastDay ? `Scores saved · ${dayLabel(day)}` : 'Saved · today is kept');

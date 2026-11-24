@@ -11,6 +11,10 @@ period. The app does not send notifications.
 To correct a past entry, select its date under **Review → A day in full**.
 You can edit your own scores and prayers; your partner’s entries are read-only.
 
+The daily Qur’an verse appears on first open each day and on the Prayer tab.
+[Talal Itani, ClearQuran](https://www.clearquran.com/) provides the English
+translation (Allah edition, unmodified, [CC BY-ND 4.0](https://creativecommons.org/licenses/by-nd/4.0/)).
+
 Vanilla JS. No framework, no build step, no dependencies. Data lives in
 IndexedDB on the device; the UI never waits on a network.
 

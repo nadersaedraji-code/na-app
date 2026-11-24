@@ -6,12 +6,13 @@
 
 import * as db from './db.js';
 import * as sync from './sync.js';
+import { dailyVerse } from './verses.js';
 import { BACKEND } from './config.js';
 import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '4.1.5';
+const APP_VERSION = '4.2.0';
 const LOCALE = 'en-GB';
 const FRESH_START_DAY = '2026-11-22';
 const FRESH_START_CUTOFF = Date.parse('2026-11-22T20:15:52Z');
@@ -21,6 +22,7 @@ const COUNTING_START_DAY = '2026-11-23';
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '4.2.0', at: '24 Nov 2026', notes: "A daily Qur’an verse in English greets you on the first open of the day." },
   { v: '4.1.5', at: '24 Nov 2026', notes: "Recover missed partner scores and keep score saves queued during sync." },
   { v: '4.1.4', at: '24 Nov 2026', notes: "Make Edit buttons visible in daily history and add an Edit past entries shortcut." },
   { v: '4.1.3', at: '24 Nov 2026', notes: "Edit your own past scores and prayers from Review." },
@@ -117,34 +119,6 @@ const AVATARS = [
   '🐝', '🐞', '🐢', '🦢', '🦉', '🐚',
   '🐳', '🌊', '❤️', '🤍', '💛', '💚',
   '💜', '🫶', '🤲', '🧿', '📿', '🎈',
-];
-
-/* A small, curated rotation. One verse a day, chosen by date. */
-const VERSES = [
-  { ref: '2:152', text: 'So remember Me; I will remember you. And be grateful to Me and do not deny Me.' },
-  { ref: '2:186', text: 'And when My servants ask you concerning Me — indeed I am near. I respond to the invocation of the supplicant when he calls upon Me.' },
-  { ref: '2:216', text: 'Perhaps you hate a thing and it is good for you; and perhaps you love a thing and it is bad for you. And Allah knows, while you know not.' },
-  { ref: '2:286', text: 'Allah does not charge a soul except with that within its capacity.' },
-  { ref: '3:139', text: 'And do not weaken and do not grieve, and you will be superior if you are believers.' },
-  { ref: '3:173', text: 'Sufficient for us is Allah, and He is the best Disposer of affairs.' },
-  { ref: '9:51', text: 'Never will we be struck except by what Allah has decreed for us; He is our protector. And upon Allah let the believers rely.' },
-  { ref: '13:28', text: 'Those who have believed and whose hearts are assured by the remembrance of Allah. Unquestionably, by the remembrance of Allah hearts are assured.' },
-  { ref: '14:7', text: 'If you are grateful, I will surely increase you in favour.' },
-  { ref: '20:114', text: 'My Lord, increase me in knowledge.' },
-  { ref: '29:69', text: 'And those who strive for Us — We will surely guide them to Our ways. And indeed, Allah is with the doers of good.' },
-  { ref: '39:53', text: 'Do not despair of the mercy of Allah. Indeed, Allah forgives all sins. Indeed, it is He who is the Forgiving, the Merciful.' },
-  { ref: '40:60', text: 'And your Lord says: call upon Me; I will respond to you.' },
-  { ref: '55:60', text: 'Is the reward for good anything but good?' },
-  { ref: '57:4', text: 'And He is with you wherever you are.' },
-  { ref: '65:3', text: 'And whoever relies upon Allah — then He is sufficient for him.' },
-  { ref: '94:5', text: 'For indeed, with hardship will be ease. Indeed, with hardship will be ease.' },
-  { ref: '2:153', text: 'O you who have believed, seek help through patience and prayer. Indeed, Allah is with the patient.' },
-  { ref: '16:97', text: 'Whoever does righteousness, whether male or female, while he is a believer — We will surely cause him to live a good life.' },
-  { ref: '49:13', text: 'Indeed, the most noble of you in the sight of Allah is the most righteous of you.' },
-  { ref: '93:5', text: 'And your Lord is going to give you, and you will be satisfied.' },
-  { ref: '41:30', text: 'Indeed, those who have said, “Our Lord is Allah,” and then remained on a right course — the angels descend upon them: do not fear and do not grieve.' },
-  { ref: '24:35', text: 'Allah is the Light of the heavens and the earth.' },
-  { ref: '2:255', text: 'His Throne encompasses the heavens and the earth, and their preservation tires Him not. And He is the Most High, the Most Great.' },
 ];
 
 const DEFAULTS = {
@@ -303,18 +277,36 @@ function greeting() {
   return 'Good night';
 }
 
-const dayOfYear = (d = new Date()) =>
-  Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 86400000);
-
-function verseCard() {
-  const v = VERSES[dayOfYear() % VERSES.length];
+function verseCard(day = dayKey(), welcome = false) {
+  const [ref, surah, translation] = dailyVerse(day);
   return `
-    <section class="verse card">
-      <div class="verse-label">Verse for today</div>
-      <p>${esc(v.text)}</p>
-      <div class="verse-rule"></div>
-      <div class="verse-ref">Qur’an ${v.ref}</div>
+    <section class="verse card" data-verse-day="${day}">
+      <div class="verse-label"${welcome ? ' id="daily-verse-title"' : ''}>Verse of the day</div>
+      <div class="verse-emblem" aria-hidden="true">✦</div>
+      <blockquote class="verse-translation">${esc(translation)}</blockquote>
+      <div class="verse-rule" aria-hidden="true"></div>
+      <div class="verse-ref">Surah ${esc(surah)} · ${esc(ref)}</div>
     </section>`;
+}
+
+let lastVerseWelcome = null;
+function updateDailyVerse({ welcome = false } = {}) {
+  if ($('#app').hidden || document.visibilityState !== 'visible') return;
+  const day = dayKey();
+  const card = $('#screen [data-verse-day]');
+  if (card && card.dataset.verseDay !== day) card.outerHTML = verseCard(day);
+  if (!welcome || lastVerseWelcome === day || $('#overlay-root .sheet')) return;
+
+  try {
+    if (localStorage.getItem('na:daily-verse-seen') === day) return;
+  } catch { /* the in-memory marker still works */ }
+  const dialog = $('#daily-verse-welcome');
+  if (!dialog?.showModal || dialog.open) return;
+  dialog.innerHTML = `${verseCard(day, true)}
+    <form method="dialog"><button class="btn primary wide" autofocus>Continue</button></form>`;
+  dialog.showModal();
+  lastVerseWelcome = day;
+  try { localStorage.setItem('na:daily-verse-seen', day); } catch { /* optional storage */ }
 }
 
 /** Calculations begin on this date. Set at onboarding, editable in Settings. */
@@ -504,9 +496,11 @@ async function boot() {
 
   // The room changes light with the actual sky, even when the app stays open.
   applySky();
-  setInterval(applySky, 4 * 60 * 1000);
+  setInterval(() => { applySky(); updateDailyVerse(); }, 4 * 60 * 1000);
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') applySky();
+    if (document.visibilityState !== 'visible') return;
+    applySky();
+    updateDailyVerse({ welcome: true });
   });
 }
 
@@ -598,6 +592,7 @@ function showApp() {
   $('#onboarding').innerHTML = '';
   $('#app').hidden = false;
   render();
+  updateDailyVerse({ welcome: !new URLSearchParams(location.search).has('log') });
 }
 
 /* ============================================================
@@ -1598,6 +1593,8 @@ function viewPrayer() {
       </div>
        <button class="head-avatar" data-act="open-settings" aria-label="Settings" style="box-shadow:0 0 0 3px ${who.color}30">${who.avatar}</button>
     </header>
+
+    ${verseCard(today)}
 
     ${soon ? `<button class="urgent" data-act="log" data-key="${soon.k}">
       <span class="dot"></span>

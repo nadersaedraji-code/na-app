@@ -263,12 +263,18 @@ input:not([type="checkbox"]):not([type="radio"]),textarea{border:0;}
 .quiet{text-align:center;font-size:12px;color:var(--ink-3);letter-spacing:.02em;margin-top:30px;line-height:1.7;}
 
 /* verse ------------------------------------------------------------ */
-.verse{margin:0;padding:30px 24px 24px;text-align:center;position:relative;overflow:hidden;}
-.verse::before{content:"";position:absolute;inset:0;background:radial-gradient(120% 100% at 50% 0%, color-mix(in srgb, var(--sky-a) 80%, transparent), transparent 72%);pointer-events:none;}
-.verse-label{font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--pink);font-weight:700;margin-bottom:16px;position:relative;}
-.verse p{font-family:var(--serif);font-size:clamp(19px,5.5vw,23px);line-height:1.52;letter-spacing:-.008em;position:relative;color:var(--ink);font-weight:400;}
-.verse-rule{width:30px;height:1px;background:var(--line-2);margin:20px auto 12px;}
-.verse-ref{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3);font-weight:600;font-family:var(--font);}
+.verse{isolation:isolate;position:relative;overflow:hidden;margin:0 0 16px;padding:25px clamp(17px,5vw,32px) 24px;text-align:center;background:radial-gradient(ellipse at 50% 0%,color-mix(in srgb,var(--gold) 19%,var(--card)),var(--card) 75%);}
+.verse::before{content:"";position:absolute;z-index:-1;inset:8px;border:1px solid color-mix(in srgb,var(--gold) 34%,transparent);border-radius:16px;pointer-events:none;}
+.verse-label{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--gold-ink);font-weight:750;}
+.verse-emblem,.verse-rule{display:flex;align-items:center;justify-content:center;gap:9px;margin:8px auto;color:var(--gold-ink);}
+.verse-emblem::before,.verse-emblem::after{content:"";width:24px;height:1px;background:currentColor;opacity:.4;}
+.verse-rule{width:44px;height:1px;background:color-mix(in srgb,var(--gold-ink) 35%,transparent);margin:15px auto;}
+.verse-translation{max-width:34ch;margin:12px auto 0;font-family:var(--serif);font-size:clamp(21px,5.7vw,29px);font-style:italic;font-weight:400;line-height:1.38;text-wrap:pretty;color:var(--ink);}
+.verse-ref{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold-ink);font-weight:700;}
+.verse-welcome{position:fixed;inset:0;width:min(92vw,510px);max-height:calc(100dvh - 32px);margin:auto;padding:12px;border:1px solid var(--line);border-radius:27px;background:var(--bg-soft);color:var(--ink);overflow:auto;box-shadow:0 22px 80px #0c071557;}
+.verse-welcome::backdrop{background:#120e1bb0;backdrop-filter:blur(6px);}
+.verse-welcome .verse{margin-bottom:10px;box-shadow:none;}
+.verse-welcome form{margin-top:8px;}
 
 /* urgent banner --------------------------------------------------------- */
 .urgent{

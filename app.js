@@ -12,7 +12,7 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '4.2.0';
+const APP_VERSION = '4.2.1';
 const LOCALE = 'en-GB';
 const FRESH_START_DAY = '2026-11-22';
 const FRESH_START_CUTOFF = Date.parse('2026-11-22T20:15:52Z');
@@ -22,6 +22,7 @@ const COUNTING_START_DAY = '2026-11-23';
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '4.2.1', at: '24 Nov 2026', notes: "Combined prayers can be logged and count toward your streak." },
   { v: '4.2.0', at: '24 Nov 2026', notes: "A daily Qur’an verse in English greets you on the first open of the day." },
   { v: '4.1.5', at: '24 Nov 2026', notes: "Recover missed partner scores and keep score saves queued during sync." },
   { v: '4.1.4', at: '24 Nov 2026', notes: "Make Edit buttons visible in daily history and add an Edit past entries shortcut." },
@@ -103,6 +104,7 @@ const PMETA = {
 
 const STATUS_LABEL = {
   ontime: 'On time',
+  combined: 'Combined',
   late: 'Late',
   missed: 'Missed',
   period: 'Period',
@@ -971,8 +973,8 @@ function go(view) {
   window.scrollTo(0, S.scroll[view] || 0);
 }
 
-/** A day counts when all five are kept: on time, at the mosque, or period. */
-const validPrayer = (rec) => !!rec && (rec.status === 'ontime' || rec.status === 'period' || rec.mosque === true);
+/** A day counts when all five are on time, combined, at the mosque, or period. */
+const validPrayer = (rec) => !!rec && (['ontime', 'combined', 'period'].includes(rec.status) || rec.mosque === true);
 const validPrayerCount = (memberId, day) =>
   PRAYER_ORDER.filter((key) => validPrayer(getPrayer(memberId, day, key))).length;
 
@@ -996,11 +998,11 @@ function excusedDays(memberId) {
   return out;
 }
 
-const prayerKept = (r) => !!r && (r.status === 'ontime' || r.mosque === true);
-const prayerCounted = (r) => !!r && (r.status === 'ontime' || r.status === 'late');
+const prayerKept = (r) => !!r && (['ontime', 'combined'].includes(r.status) || r.mosque === true);
+const prayerCounted = (r) => !!r && ['ontime', 'combined', 'late'].includes(r.status);
 
 /**
- * A day joins the streak when all five are on time, at the mosque, or period.
+ * A day joins the streak when all five are on time, combined, at the mosque, or period.
  * Today never breaks a streak while it is still being lived —
  * the count falls back to yesterday until today is complete.
  */
@@ -1056,7 +1058,7 @@ function streakPanel(member) {
       <div class="streak-symbol">${flameSvg(26)}</div>
       <div><div class="streak-label">${esc(member.name)}'s prayer streak</div>
         <div class="streak-number num">${streak.current}<span> ${streak.current === 1 ? 'day' : 'days'}</span></div>
-        <div class="streak-detail">${perfect.has(today) ? 'All five count today — your streak grows.' : `${progress} of 5 valid today · on time, mosque or period`}</div>
+        <div class="streak-detail">${perfect.has(today) ? 'All five count today — your streak grows.' : `${progress} of 5 count today · on time, combined, mosque or period`}</div>
       </div>
       <div class="streak-record">Best <b class="num">${streak.best}</b></div>
     </div>
@@ -1542,10 +1544,10 @@ function viewPrayer() {
     const rec = getPrayer(who.id, today, k);
     const state = rec?.status || 'pending';
     const fresh = S.justLogged === k && state !== 'pending' ? ' data-fresh="1"' : '';
-    const flood = state === 'ontime' ? 'var(--ok)' : state === 'late' ? 'var(--late)' : state === 'missed' ? 'var(--miss)' : state === 'period' ? 'var(--pink)' : 'transparent';
+    const flood = state === 'ontime' ? 'var(--ok)' : state === 'combined' ? 'var(--combined)' : state === 'late' ? 'var(--late)' : state === 'missed' ? 'var(--miss)' : state === 'period' ? 'var(--pink)' : 'transparent';
     return `
       <button class="prow" data-act="log" data-key="${k}" data-state="${state}" data-mosque="${rec?.mosque ? '1' : '0'}"${fresh} style="--flood:${flood}">
-        <span class="glyph">${state === 'ontime' ? '✓' : state === 'late' ? '◔' : state === 'missed' ? '✕' : state === 'period' ? '—' : '○'}</span>
+        <span class="glyph">${state === 'ontime' ? '✓' : state === 'combined' ? '↔' : state === 'late' ? '◔' : state === 'missed' ? '✕' : state === 'period' ? '—' : '○'}</span>
         <span class="meta">
           <span class="name">${PMETA[k].name}${rec?.mosque ? `<span class="mosque-tag">${I.mosque} Mosque</span>` : ''}<span class="ar">${PMETA[k].ar}</span></span>
           <span class="window num">${fmtTime(t[k])} – ${fmtTime(t.onTimeEnd[k])}</span>
@@ -1859,7 +1861,7 @@ function weeklyRecap(who, partner) {
         <div><b class="num">${pct(current)}%</b>${prior ? delta(pct(current), pct(prior), '%') : '<span class="recap-delta neutral">First week</span>'}</div>
       </div>
       <div class="recap-day-list">${dayCards}</div>
-      <div class="recap-key"><i class="ontime"></i>On time <i class="mosque"></i>Mosque <i class="period"></i>Period <i class="late"></i>Late <i class="missed"></i>Missed</div>
+      <div class="recap-key"><i class="ontime"></i>On time <i class="combined"></i>Combined <i class="mosque"></i>Mosque <i class="period"></i>Period <i class="late"></i>Late <i class="missed"></i>Missed</div>
       ${weeks.length > 1 ? `<div class="recap-timeline"><span>Earlier weeks</span>
         <div>${weeks.map((w, i) => `<button data-act="recap-week" data-index="${i}" aria-current="${i === index ? 'true' : 'false'}" aria-label="Week ${i + 1}, ${esc(w.to)}" title="${esc(w.from)} – ${esc(w.to)}"><i></i></button>`).join('')}</div>
       </div>` : ''}
@@ -2291,6 +2293,7 @@ function sheetStatus(key, pastDay) {
   const sug = suggest(t, key, new Date());
   const opts = [
     ['ontime', 'On time', 'Inside the window', 'var(--ok)'],
+    ['combined', 'Combined', 'Prayed with another prayer · counts for the streak', 'var(--combined)'],
     ['late', 'Late', 'Prayed, after the window', 'var(--late)'],
     ['missed', 'Missed', 'Not prayed in the window', 'var(--miss)'],
     ['period', 'Period', 'Excused — counts for the streak', 'var(--pink)'],
@@ -2735,7 +2738,7 @@ const ACTIONS = {
     const day = pastDay || dayKey();
     const rec = getPrayer(who.id, day, key);
     const on = !rec?.mosque;
-    const status = on && !['ontime', 'late'].includes(rec?.status) ? 'ontime' : rec?.status || 'ontime';
+    const status = on && !['ontime', 'late', 'combined'].includes(rec?.status) ? 'ontime' : rec?.status || 'ontime';
     await patchPrayer(who.id, day, key, { mosque: on, status });
     el.querySelector('.switch')?.setAttribute('aria-checked', String(on));
     haptic(8);

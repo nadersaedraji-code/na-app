@@ -537,6 +537,8 @@ input:not([type="checkbox"]):not([type="radio"]),textarea{border:0;}
 .history-prayer .pill{font-size:10.5px;padding:5px 8px;}
 .history-prayer small{display:flex;align-items:center;gap:2px;color:var(--gold-ink);font-size:10px;}
 .history-prayer small svg{width:12px;height:12px;}
+.history-edit{margin-left:auto;flex:none;min-height:32px;padding:4px 9px;border-radius:9px;background:var(--card-flat);color:var(--ink);font-size:11px;}
+.history-edit:focus-visible{outline:2px solid var(--pink);outline-offset:2px;}
 .weekly-recap{background:linear-gradient(155deg,color-mix(in srgb,var(--gold) 11%,var(--card)),var(--card) 48%);}
 .recap-nav{display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:center;margin-bottom:16px;}
 .recap-nav button{width:37px;height:37px;flex:none;border-radius:12px;background:var(--card-flat);font-size:23px;}

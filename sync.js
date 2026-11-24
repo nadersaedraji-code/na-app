@@ -67,7 +67,7 @@ const iso = (v) => (v ? new Date(v).toISOString() : null);
 
 function toWire(kind, r) {
   if (kind === 'prayers') {
-    return { id: r.id, member_id: r.memberId, day: r.day, prayer: r.key, status: r.status, logged_at: iso(r.loggedAt) };
+    return { id: r.id, member_id: r.memberId, day: r.day, prayer: r.key, status: r.status, mosque: !!r.mosque, logged_at: iso(r.loggedAt) };
   }
   if (kind === 'plan') {
     return {
@@ -116,7 +116,7 @@ const when = (v) => (v ? new Date(v).getTime() : null);
 function fromWire(kind, w) {
   const base = { updatedAt: when(w.updated_at) || Date.now() };
   if (kind === 'prayers') {
-    return { ...base, id: w.id, memberId: w.member_id, day: w.day, key: w.prayer, status: w.status, loggedAt: when(w.logged_at) };
+    return { ...base, id: w.id, memberId: w.member_id, day: w.day, key: w.prayer, status: w.status, mosque: !!w.mosque, loggedAt: when(w.logged_at) };
   }
   if (kind === 'plan') {
     return {

@@ -11,7 +11,7 @@ import {
   METHODS, PRAYER_ORDER, dayTimes, suggest, nextPrayer, fmtTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '4.1.2';
+const APP_VERSION = '4.1.3';
 const LOCALE = 'en-GB';
 const FRESH_START_DAY = '2026-11-22';
 const FRESH_START_CUTOFF = Date.parse('2026-11-22T20:15:52Z');
@@ -21,6 +21,7 @@ const COUNTING_START_DAY = '2026-11-23';
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '4.1.3', at: '24 Nov 2026', notes: "Edit your own past scores and prayers from Review." },
   { v: '4.1.2', at: '24 Nov 2026', notes: "Score choices stay selected during sync, and partner scores are clearer and update only when data changes." },
   { v: '4.1.1', at: '23 Nov 2026', notes: "Scores run from 1 to 10 on one row, and counting begins 23 November." },
   { v: '4.1.0', at: '23 Nov 2026', notes: "Prayer streaks, interactive daily scores and weekly recaps; notifications are off." },
@@ -316,6 +317,9 @@ function verseCard() {
 
 /** Calculations begin on this date. Set at onboarding, editable in Settings. */
 const statsStart = () => S.settings.startDate || dayKey();
+const canEditPastDay = (day) =>
+  !isPreview() && !!me() && /^\d{4}-\d{2}-\d{2}$/.test(day)
+  && day >= statsStart() && day < dayKey() && dayKey(parseDay(day)) === day;
 
 async function ensureStartDate() {
   if (S.settings.startDate) return;
@@ -395,30 +399,22 @@ function prayerCount(memberId, day) {
 
 /* ---------- persistence ---------- */
 async function savePrayer(memberId, day, key, status) {
-  const id = `${memberId}|${day}|${key}`;
-  let rec = S.prayers.find((p) => p.id === id);
-  if (!rec) {
-    rec = { id, memberId, day, key, status, loggedAt: Date.now(), demo: false };
-    S.prayers.push(rec);
-  } else {
-    rec.status = status;
-    rec.loggedAt = Date.now();
-    rec.demo = false;
-  }
-  await db.put('prayers', rec);
-  return rec;
+  return patchPrayer(memberId, day, key, {
+    status, ...(status === 'missed' || status === 'period' ? { mosque: false } : {}),
+  });
 }
 
 /** Create or patch one prayer record (status, mosque, …). */
 async function patchPrayer(memberId, day, key, patch) {
-  const id = `${memberId}|${day}|${key}`;
-  let rec = S.prayers.find((p) => p.id === id);
-  if (!rec) {
-    rec = { id, memberId, day, key, status: 'ontime', mosque: false, demo: false };
-    S.prayers.push(rec);
-  }
-  Object.assign(rec, patch, { loggedAt: Date.now(), demo: false });
+  const existing = getPrayer(memberId, day, key);
+  const rec = {
+    id: `${memberId}|${day}|${key}`, memberId, day, key, status: 'ontime', mosque: false,
+    ...existing, ...patch, loggedAt: Date.now(), demo: false,
+  };
   await db.put('prayers', rec);
+  const i = S.prayers.findIndex((p) => p.id === rec.id);
+  if (i >= 0) S.prayers[i] = rec;
+  else S.prayers.push(rec);
   return rec;
 }
 
@@ -444,10 +440,10 @@ async function savePlan(item) {
 }
 
 async function saveReview(rec) {
+  await db.put('reviews', rec);
   const i = S.reviews.findIndex((r) => r.id === rec.id);
   if (i >= 0) S.reviews[i] = rec;
   else S.reviews.push(rec);
-  await db.put('reviews', rec);
   return rec;
 }
 
@@ -950,7 +946,7 @@ function render() {
 
 function refresh() {
   const y = window.scrollY;
-  const focusedScore = document.activeElement?.matches?.('[data-act="score-pick"]')
+  const focusedScore = document.activeElement?.matches?.('#screen [data-act="score-pick"]')
     ? { field: document.activeElement.closest('[data-score-control]')?.dataset.scoreControl,
         score: document.activeElement.dataset.score } : null;
   render();
@@ -1703,11 +1699,10 @@ function viewReview() {
     ${compare}
 
     <form class="review-form" data-form="save-review">
-       ${scoreControl('happiness', 'Satisfaction', draft?.happiness ?? displayedScore(mine?.happiness) ?? 5, 'How happy did today feel?')}
-       ${scoreControl('productivity', 'Productivity', draft?.productivity ?? displayedScore(mine?.productivity) ?? 5, 'How much could you get done?')}
+       ${reviewControls(mine, draft)}
       <div class="card card-pad">
        <button class="btn primary wide" type="submit">${saved ? 'Update today' : 'Save today'}</button>
-       ${saved ? `<div style="text-align:center;font-size:12px;color:var(--ink-3);margin-top:10px">Saved · you can change it until the day ends</div>` : ''}
+        ${saved ? `<div style="text-align:center;font-size:12px;color:var(--ink-3);margin-top:10px">Saved · edit past scores in A day in full</div>` : ''}
       </div>
     </form>
 
@@ -1715,6 +1710,11 @@ function viewReview() {
     ${weeklyRecap(who, p)}
     ${dayHistory(who, p)}
   `;
+}
+
+function reviewControls(review, draft) {
+  return `${scoreControl('happiness', 'Satisfaction', draft?.happiness ?? displayedScore(review?.happiness) ?? 5, 'How happy did the day feel?')}
+    ${scoreControl('productivity', 'Productivity', draft?.productivity ?? displayedScore(review?.productivity) ?? 5, 'How much did you get done?')}`;
 }
 
 const scoreDescription = (score, field) => field === 'productivity'
@@ -1869,6 +1869,7 @@ function dayHistory(who, partner) {
   const start = statsStart() > today ? today : statsStart();
   const selected = S.historyDay && S.historyDay >= start && S.historyDay <= today ? S.historyDay : today;
   const person = (member) => {
+    const editable = member.id === S.viewerId && canEditPastDay(selected);
     const review = reviewFor(member.id, selected);
     const prayers = PRAYER_ORDER.map((key) => {
       const rec = getPrayer(member.id, selected, key);
@@ -1877,10 +1878,13 @@ function dayHistory(who, partner) {
         <span>${PMETA[key].name}</span>
         <span class="pill ${state}"><span class="dot"></span>${STATUS_LABEL[state]}</span>
         ${rec?.mosque ? `<small>${I.mosque} Mosque</small>` : ''}
+        ${editable ? `<button type="button" class="history-edit" data-act="edit-past-prayer" data-day="${selected}" data-key="${key}" aria-label="Edit ${PMETA[key].name}">Edit</button>` : ''}
       </div>`;
     }).join('');
     return `<div class="history-person">
-      <div class="history-person-name"><span>${esc(member.avatar)}</span>${esc(member.name)}</div>
+      <div class="history-person-name"><span>${esc(member.avatar)}</span>${esc(member.name)}
+        ${editable ? `<button type="button" class="history-edit" data-act="edit-past-review" data-day="${selected}">${review ? 'Edit scores' : 'Add scores'}</button>` : ''}
+      </div>
       <div class="their-scores">
         <div><span>Satisfaction</span><b class="num">${displayedScore(review?.happiness) ?? '–'}</b><i>/10</i></div>
         <div><span>Productivity</span><b class="num">${displayedScore(review?.productivity) ?? '–'}</b><i>/10</i></div>
@@ -2255,14 +2259,31 @@ function closeSheet(instant = false) {
   scrim?.classList.remove('open');
   sheet?.classList.remove('open');
   if (sheet) sheet.style.transform = '';
-  const clear = () => { root.innerHTML = ''; };
+  const clear = () => {
+    if (sheet?.parentNode === root) root.innerHTML = '';
+  };
   if (instant) clear();
   else setTimeout(clear, 340);
 }
 
-function sheetStatus(key) {
+function sheetPastReview(day) {
+  const review = reviewFor(me().id, day);
+  openSheet(`
+    <div class="grip"></div>
+    <h3>${review ? 'Edit' : 'Add'} scores</h3>
+    <p class="sheet-sub">${esc(dayLabel(day))}</p>
+    <form class="review-form" data-form="save-review" data-day="${day}">
+      ${reviewControls(review)}
+      <button class="btn primary wide" type="submit">Save scores</button>
+      <button class="btn ghost wide" type="button" data-act="close">Cancel</button>
+    </form>
+  `);
+}
+
+function sheetStatus(key, pastDay) {
   const who = actor();
-  const day = dayKey();
+  const day = pastDay || dayKey();
+  const dateAttr = pastDay ? `data-day="${pastDay}"` : '';
   const t = times(day);
   const rec = getPrayer(who.id, day, key);
   const sug = suggest(t, key, new Date());
@@ -2270,25 +2291,26 @@ function sheetStatus(key) {
     ['ontime', 'On time', 'Inside the window', 'var(--ok)'],
     ['late', 'Late', 'Prayed, after the window', 'var(--late)'],
     ['missed', 'Missed', 'Not prayed in the window', 'var(--miss)'],
-    ['period', 'Period', 'Excused — not counted', 'var(--pink)'],
+    ['period', 'Period', 'Excused — counts for the streak', 'var(--pink)'],
   ];
 
   openSheet(`
     <div class="grip"></div>
     <h3>${PMETA[key].name} <span style="color:var(--ink-3);font-size:14px;font-weight:400">${PMETA[key].ar}</span></h3>
-    <p class="sheet-sub num">${fmtTime(t[key])} – ${fmtTime(t.onTimeEnd[key])} · ${sug === 'ontime' ? 'still on time' : sug === 'late' ? 'late now' : 'window closed'}</p>
+    <p class="sheet-sub num">${pastDay ? `${esc(dayLabel(day))} · ` : ''}${fmtTime(t[key])} – ${fmtTime(t.onTimeEnd[key])}${pastDay ? '' : ` · ${sug === 'ontime' ? 'still on time' : sug === 'late' ? 'late now' : 'window closed'}`}</p>
     <div class="sheet-list">
       ${opts.map(([val, label, sub, color]) => `
-        <button class="sheet-opt" data-act="set-status" data-key="${key}" data-status="${val}" ${rec?.status === val ? 'data-active="true"' : ''}>
+        <button class="sheet-opt" data-act="set-status" data-key="${key}" data-status="${val}" ${dateAttr} ${rec?.status === val ? 'data-active="true"' : ''}>
           <span class="sw" style="background:${color}"></span>
           <span class="lbl">${label}<span class="sub">${sub}</span></span>
           ${rec?.status === val ? '<span style="color:var(--ink-2)">✓</span>' : ''}
         </button>`).join('')}
-      <button class="sheet-opt" data-act="toggle-mosque" data-key="${key}">
+      <button class="sheet-opt" data-act="toggle-mosque" data-key="${key}" ${dateAttr}>
         <span class="sw" style="background:var(--gold)"></span>
         <span class="lbl">Prayed at the mosque<span class="sub">Counts for the streak even if late</span></span>
         <span class="switch" role="switch" aria-checked="${!!rec?.mosque}"></span>
       </button>
+      ${pastDay && rec ? `<button class="sheet-opt" data-act="clear-status" data-key="${key}" ${dateAttr}>Remove prayer entry</button>` : ''}
       <button class="sheet-opt cancel" data-act="close">Cancel</button>
     </div>
   `);
@@ -2619,7 +2641,7 @@ function pickScore(button) {
   const value = Number(button.dataset.score);
   control.querySelector('input[type="hidden"]').value = value;
   const form = control.closest('[data-form="save-review"]');
-  S.reviewDraft = {
+  if (!form.dataset.day) S.reviewDraft = {
     memberId: actor().id,
     day: dayKey(),
     happiness: Number(form.elements.happiness.value),
@@ -2667,18 +2689,25 @@ const ACTIONS = {
     S.historyDay = dayKey(addDays(parseDay(current), 1));
     refresh();
   },
+  'edit-past-review': (el) => {
+    if (canEditPastDay(el.dataset.day)) sheetPastReview(el.dataset.day);
+  },
+  'edit-past-prayer': (el) => {
+    if (canEditPastDay(el.dataset.day)) sheetStatus(el.dataset.key, el.dataset.day);
+  },
   close: () => closeSheet(),
   'open-settings': () => go('settings'),
 
   log: (el) => sheetStatus(el.dataset.key),
 
   'set-status': async (el) => {
-    const { key, status } = el.dataset;
+    const { key, status, day: pastDay } = el.dataset;
+    if (pastDay && !canEditPastDay(pastDay)) return;
     const who = actor();
     el.closest('.sheet-opt')?.classList.add('pop');
-    await savePrayer(who.id, dayKey(), key, status);
+    await savePrayer(who.id, pastDay || dayKey(), key, status);
     haptic(10);
-    S.justLogged = key;
+    if (!pastDay) S.justLogged = key;
     closeSheet();
     refresh();
     setTimeout(() => { S.justLogged = null; }, 950);
@@ -2686,15 +2715,18 @@ const ACTIONS = {
   },
 
   'toggle-mosque': async (el) => {
+    const { key, day: pastDay } = el.dataset;
+    if (pastDay && !canEditPastDay(pastDay)) return;
     const who = actor();
-    const key = el.dataset.key;
-    const day = dayKey();
+    const day = pastDay || dayKey();
     const rec = getPrayer(who.id, day, key);
     const on = !rec?.mosque;
-    await patchPrayer(who.id, day, key, { mosque: on, status: on && !rec ? 'ontime' : rec?.status || 'ontime' });
+    const status = on && !['ontime', 'late'].includes(rec?.status) ? 'ontime' : rec?.status || 'ontime';
+    await patchPrayer(who.id, day, key, { mosque: on, status });
     el.querySelector('.switch')?.setAttribute('aria-checked', String(on));
     haptic(8);
-    S.justLogged = key;
+    if (!pastDay) S.justLogged = key;
+    else sheetStatus(key, pastDay);
     refresh();
     setTimeout(() => { S.justLogged = null; }, 900);
   },
@@ -2716,8 +2748,12 @@ const ACTIONS = {
     toast(on ? 'Excused today — prayers not counted' : 'Back to counting');
   },
 
-  'clear-status': async (el) => {    const who = actor();
-    const id = `${who.id}|${dayKey()}|${el.dataset.key}`;
+  'clear-status': async (el) => {
+    const { key, day: pastDay } = el.dataset;
+    if (pastDay && !canEditPastDay(pastDay)) return;
+    const who = actor();
+    const id = getPrayer(who.id, pastDay || dayKey(), key)?.id;
+    if (!id) return;
     S.prayers = S.prayers.filter((p) => p.id !== id);
     await db.del('prayers', id);
     closeSheet();
@@ -3101,8 +3137,10 @@ document.addEventListener('submit', async (e) => {
 
 
   if (kind === 'save-review') {
+    const pastDay = form.dataset.day;
+    if (pastDay && !canEditPastDay(pastDay)) return;
     const who = actor();
-    const day = dayKey();
+    const day = pastDay || dayKey();
     const existing = reviewFor(who.id, day);
     const rec = {
       ...existing,
@@ -3116,10 +3154,11 @@ document.addEventListener('submit', async (e) => {
       demo: false,
     };
     await saveReview(rec);
-    S.reviewDraft = null;
+    if (pastDay) closeSheet();
+    else S.reviewDraft = null;
     haptic(14);
     refresh();
-    toast('Saved · today is kept');
+    toast(pastDay ? `Scores saved · ${dayLabel(day)}` : 'Saved · today is kept');
     return;
   }
 

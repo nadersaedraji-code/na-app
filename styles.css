@@ -265,13 +265,21 @@ input:not([type="checkbox"]):not([type="radio"]),textarea{border:0;}
 .quiet{text-align:center;font-size:12px;color:var(--ink-3);letter-spacing:.02em;margin-top:30px;line-height:1.7;}
 
 /* verse ------------------------------------------------------------ */
-.verse{isolation:isolate;position:relative;overflow:hidden;margin:0 0 16px;padding:25px clamp(17px,5vw,32px) 24px;text-align:center;background:radial-gradient(ellipse at 50% 0%,color-mix(in srgb,var(--gold) 19%,var(--card)),var(--card) 75%);}
+@font-face{font-family:"Amiri Quran";src:url("./fonts/amiri-quran-arabic.woff2") format("woff2");font-weight:400;font-style:normal;font-display:swap;}
+.verse{isolation:isolate;position:relative;overflow:hidden;margin:0 0 16px;padding:25px clamp(17px,5vw,32px) 24px;text-align:center;background:radial-gradient(ellipse at 50% 0%,color-mix(in srgb,var(--gold) 19%,transparent),transparent 75%),var(--card);}
 .verse::before{content:"";position:absolute;z-index:-1;inset:8px;border:1px solid color-mix(in srgb,var(--gold) 34%,transparent);border-radius:16px;pointer-events:none;}
 .verse-label{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--gold-ink);font-weight:750;}
+.verse-header{display:flex;align-items:center;justify-content:center;gap:12px;}
+.verse-languages{display:flex;gap:4px;}
+.verse-languages button{min-width:32px;min-height:32px;padding:3px 6px;border:1px solid var(--line-2);border-radius:8px;color:var(--ink-2);background:var(--card-flat);font-size:11px;font-weight:700;}
+.verse-languages button[aria-pressed="true"]{border-color:var(--gold-ink);background:color-mix(in srgb,var(--gold) 22%,var(--card-flat));color:var(--ink);}
+.verse-languages button:focus-visible{outline:2px solid var(--gold-ink);outline-offset:2px;}
 .verse-emblem,.verse-rule{display:flex;align-items:center;justify-content:center;gap:9px;margin:8px auto;color:var(--gold-ink);}
 .verse-emblem::before,.verse-emblem::after{content:"";width:24px;height:1px;background:currentColor;opacity:.4;}
 .verse-rule{width:44px;height:1px;background:color-mix(in srgb,var(--gold-ink) 35%,transparent);margin:15px auto;}
 .verse-translation{max-width:34ch;margin:12px auto 0;font-family:var(--serif);font-size:clamp(21px,5.7vw,29px);font-style:italic;font-weight:400;line-height:1.38;text-wrap:pretty;color:var(--ink);}
+.verse-translation:lang(ar){max-width:none;font-family:"Amiri Quran","Geeza Pro","Noto Naskh Arabic",serif;font-style:normal;font-size:clamp(28px,7vw,40px);line-height:1.85;letter-spacing:normal;}
+.verse-footnote:not([hidden]),.verse-source:not([hidden]){margin:8px auto 0;color:var(--ink-3);font-size:10.5px;line-height:1.45;}
 .verse-ref{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold-ink);font-weight:700;}
 .verse-welcome{position:fixed;inset:0;width:min(92vw,510px);max-height:calc(100dvh - 32px);margin:auto;padding:12px;border:1px solid var(--line);border-radius:27px;background:var(--bg-soft);color:var(--ink);overflow:auto;box-shadow:0 22px 80px #0c071557;}
 .verse-welcome::backdrop{background:#120e1bb0;backdrop-filter:blur(6px);}

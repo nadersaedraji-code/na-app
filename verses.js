@@ -26,9 +26,39 @@ const VERSES = [
   ["1:6", "Al-Faatiha", "Guide us to the straight path."],
 ];
 
+// Romanian: Islam4ro.com, QuranEnc edition romanian_project v1.0.4.
+// Arabic text, translations and footnotes are reproduced verbatim from QuranEnc.com.
+const ORIGINAL_AND_ROMANIAN = {
+  "93:5": ["Și Domnul tău îți va dărui și vei fi tu mulțumit!", "وَلَسَوۡفَ يُعۡطِيكَ رَبُّكَ فَتَرۡضَىٰٓ"],
+  "2:152": ["Pomeniţi-Mă pe Mine şi o să vă pomenesc și Eu! Şi fiţi recunoscători față de Mine și nu fiţi fără credinţă faţă de Mine!", "فَٱذۡكُرُونِيٓ أَذۡكُرۡكُمۡ وَٱشۡكُرُواْ لِي وَلَا تَكۡفُرُونِ"],
+  "29:69": ["Iar pe aceia care se străduiesc de dragul Nostru îi vom călăuzi pe căile Noastre, căci Allah este cu cei credincioși care fac bine.", "وَٱلَّذِينَ جَٰهَدُواْ فِينَا لَنَهۡدِيَنَّهُمۡ سُبُلَنَاۚ وَإِنَّ ٱللَّهَ لَمَعَ ٱلۡمُحۡسِنِينَ"],
+  "94:5": ["Cu adevărat, alături de greu vine și ușorul.", "فَإِنَّ مَعَ ٱلۡعُسۡرِ يُسۡرًا"],
+  "3:139": ["Nu fiți slabi și nici întristați, căci voi veți fi cei biruitori, dacă sunteți credincioși!", "وَلَا تَهِنُواْ وَلَا تَحۡزَنُواْ وَأَنتُمُ ٱلۡأَعۡلَوۡنَ إِن كُنتُم مُّؤۡمِنِينَ"],
+  "55:13": ["Așadar, pe care dintre binefacerile Domnului vostru le tăgăduiți?", "فَبِأَيِّ ءَالَآءِ رَبِّكُمَا تُكَذِّبَانِ"],
+  "20:114": ["Și mai presus [de toate] este Allah - Al-Malik [Regele], Al-Haqq [Adevărul]! Nu te grăbi [O, Mohammed] cu recitarea Coranului mai înainte de a ți se încheia revelarea lui! Și spune: „Doamne, sporește-mi mie știința.”", "فَتَعَٰلَى ٱللَّهُ ٱلۡمَلِكُ ٱلۡحَقُّۗ وَلَا تَعۡجَلۡ بِٱلۡقُرۡءَانِ مِن قَبۡلِ أَن يُقۡضَىٰٓ إِلَيۡكَ وَحۡيُهُۥۖ وَقُل رَّبِّ زِدۡنِي عِلۡمٗا"],
+  "26:80": ["Iar când sunt bolnav, El mă vindecă,", "وَإِذَا مَرِضۡتُ فَهُوَ يَشۡفِينِ"],
+  "39:53": ["Spune: „O, voi, robii Mei care ați întrecut măsura în defavoarea voastră, nu deznădăjduiți în privința Îndurării lui Allah.” Allah iartă toate păcatele[12]. Cu adevărat, El este Al-Ghafur [Iertător], Ar-Rahim [Îndurător].", "۞ قُلۡ يَٰعِبَادِيَ ٱلَّذِينَ أَسۡرَفُواْ عَلَىٰٓ أَنفُسِهِمۡ لَا تَقۡنَطُواْ مِن رَّحۡمَةِ ٱللَّهِۚ إِنَّ ٱللَّهَ يَغۡفِرُ ٱلذُّنُوبَ جَمِيعًاۚ إِنَّهُۥ هُوَ ٱلۡغَفُورُ ٱلرَّحِيمُ", "[12] Celor care se căiesc și se îndreaptă"],
+  "2:153": ["O, voi, cei care credeţi! Căutaţi ajutor întru răbdare şi Rugăciune. Cu adevărat Allah este cu cei răbdători!", "يَٰٓأَيُّهَا ٱلَّذِينَ ءَامَنُواْ ٱسۡتَعِينُواْ بِٱلصَّبۡرِ وَٱلصَّلَوٰةِۚ إِنَّ ٱللَّهَ مَعَ ٱلصَّٰبِرِينَ"],
+  "53:39": ["Și că omul nu va dobândi decât [rodul] celor pe care le-a agonisit", "وَأَن لَّيۡسَ لِلۡإِنسَٰنِ إِلَّا مَا سَعَىٰ"],
+  "54:17": ["Noi am făcut Coranul ușor, pentru îndemnare, dar oare se află cine să ia aminte?", "وَلَقَدۡ يَسَّرۡنَا ٱلۡقُرۡءَانَ لِلذِّكۡرِ فَهَلۡ مِن مُّدَّكِرٖ"],
+  "16:97": ["Pe cel ce face o faptă bună - bărbat sau femeie - și este credincios îl vom dărui Noi cu o viață bună. Și Noi îi vom răsplăti pe ei după [faptele] cele mai bune pe care le-au săvârșit.", "مَنۡ عَمِلَ صَٰلِحٗا مِّن ذَكَرٍ أَوۡ أُنثَىٰ وَهُوَ مُؤۡمِنٞ فَلَنُحۡيِيَنَّهُۥ حَيَوٰةٗ طَيِّبَةٗۖ وَلَنَجۡزِيَنَّهُمۡ أَجۡرَهُم بِأَحۡسَنِ مَا كَانُواْ يَعۡمَلُونَ"],
+  "94:8": ["Punându-ți [toată] speranța în Domnul tău!", "وَإِلَىٰ رَبِّكَ فَٱرۡغَب"],
+  "21:107": ["Și Noi nu te-am trimis [o, Mohammed] decât ca o îndurare pentru lumi.", "وَمَآ أَرۡسَلۡنَٰكَ إِلَّا رَحۡمَةٗ لِّلۡعَٰلَمِينَ"],
+  "87:14": ["Va izbândi cel ce se curățește [acceptând monoteismul]", "قَدۡ أَفۡلَحَ مَن تَزَكَّىٰ"],
+  "95:4": ["Noi l-am creat pe om cu cea mai frumoasă înfățișare[2],", "لَقَدۡ خَلَقۡنَا ٱلۡإِنسَٰنَ فِيٓ أَحۡسَنِ تَقۡوِيمٖ", "[2] Într-o formă simetrică și echilibrată"],
+  "2:186": ["Şi dacă te vor întreba robii Mei despre Mine [spune-le, o, Mohammed]: „Cu adevărat Eu sunt aproape, răspund rugii celor care Mă cheamă, atunci când Mă cheamă, dar şi ei să-Mi răspundă [prin ascultare] şi să creadă în Mine. Poate că ei vor fi bine călăuziţi!”", "وَإِذَا سَأَلَكَ عِبَادِي عَنِّي فَإِنِّي قَرِيبٌۖ أُجِيبُ دَعۡوَةَ ٱلدَّاعِ إِذَا دَعَانِۖ فَلۡيَسۡتَجِيبُواْ لِي وَلۡيُؤۡمِنُواْ بِي لَعَلَّهُمۡ يَرۡشُدُونَ"],
+  "112:2": ["Allah-us-Samad[2]!", "ٱللَّهُ ٱلصَّمَدُ", "[2] „Allah, Refugiul Etern” – care este căutat în timpuri dificile și la nevoie, de care depinde întreaga creație"],
+  "40:60": ["Și Domnul vostru zice: „Chemați-Mă și Eu vă voi răspunde! Cei care din prea multă trufie refuză să Mă adore vor intra în Iad umiliți\".", "وَقَالَ رَبُّكُمُ ٱدۡعُونِيٓ أَسۡتَجِبۡ لَكُمۡۚ إِنَّ ٱلَّذِينَ يَسۡتَكۡبِرُونَ عَنۡ عِبَادَتِي سَيَدۡخُلُونَ جَهَنَّمَ دَاخِرِينَ"],
+  "14:7": ["Și când Domnul vostru a vestit: „Dacă veți fi mulțumitori, vă voi înmulți [Binefacerile Mele], iar de veți fi nemulțumitori, pedeapsa Mea va fi aspră!”", "وَإِذۡ تَأَذَّنَ رَبُّكُمۡ لَئِن شَكَرۡتُمۡ لَأَزِيدَنَّكُمۡۖ وَلَئِن كَفَرۡتُمۡ إِنَّ عَذَابِي لَشَدِيدٞ"],
+  "65:3": ["Și-l va înzestra pe el de unde el nici nu se așteaptă. Iar celui care se încrede în Allah, El îi este de ajuns, căci Allah împlinește lucrul Său și Allah a stabilit un termen pentru fiecare lucru.", "وَيَرۡزُقۡهُ مِنۡ حَيۡثُ لَا يَحۡتَسِبُۚ وَمَن يَتَوَكَّلۡ عَلَى ٱللَّهِ فَهُوَ حَسۡبُهُۥٓۚ إِنَّ ٱللَّهَ بَٰلِغُ أَمۡرِهِۦۚ قَدۡ جَعَلَ ٱللَّهُ لِكُلِّ شَيۡءٖ قَدۡرٗا"],
+  "1:6": ["Călăuzește-ne pe noi către Calea cea Dreaptă[1],", "ٱهۡدِنَا ٱلصِّرَٰطَ ٱلۡمُسۡتَقِيمَ", "[1] Islamul"],
+};
+
 export function dailyVerse(day) {
   // Use a calendar date so DST and New Year cannot skip a verse.
   const days = (Date.parse(day) - Date.UTC(2026, 10, 24)) / 86_400_000;
   const index = ((days % VERSES.length) + VERSES.length) % VERSES.length;
-  return VERSES[index];
+  const [ref, surah, en] = VERSES[index];
+  const [ro, ar, roFootnote = ''] = ORIGINAL_AND_ROMANIAN[ref];
+  return { ref, surah, en, ro, ar, roFootnote };
 }

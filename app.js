@@ -12,7 +12,7 @@ import {
   METHODS, PRAYER_ORDER, CLUJ_TIME_ZONE, dayTimes, suggest, nextPrayer, fmtTime as formatPrayerTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '4.2.2';
+const APP_VERSION = '4.2.3';
 const LOCALE = 'en-GB';
 const FRESH_START_DAY = '2026-11-22';
 const FRESH_START_CUTOFF = Date.parse('2026-11-22T20:15:52Z');
@@ -22,6 +22,7 @@ const COUNTING_START_DAY = '2026-11-23';
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '4.2.3', at: '26 Nov 2026', notes: "Read the same daily verse in Romanian or in the Arabic original." },
   { v: '4.2.2', at: '24 Nov 2026', notes: "Use Masjid Cluj-Napoca’s published Mawaqit times without extra offsets, in Cluj local time." },
   { v: '4.2.1', at: '24 Nov 2026', notes: "Combined prayers can be logged and count toward your streak." },
   { v: '4.2.0', at: '24 Nov 2026', notes: "A daily Qur’an verse in English greets you on the first open of the day." },
@@ -280,16 +281,44 @@ function greeting() {
   return 'Good night';
 }
 
+let verseLanguage = 'en';
+const verseDirection = (language) => language === 'ar' ? 'rtl' : 'ltr';
+
 function verseCard(day = dayKey(), welcome = false) {
-  const [ref, surah, translation] = dailyVerse(day);
+  const verse = dailyVerse(day);
   return `
     <section class="verse card" data-verse-day="${day}">
-      <div class="verse-label"${welcome ? ' id="daily-verse-title"' : ''}>Verse of the day</div>
+      <div class="verse-header">
+        <div class="verse-label"${welcome ? ' id="daily-verse-title"' : ''}>Verse of the day</div>
+        <div class="verse-languages" role="group" aria-label="Verse language">
+          <button type="button" data-act="verse-language" data-language="ro" aria-label="Romanian translation" aria-pressed="${verseLanguage === 'ro'}">Ro</button>
+          <button type="button" data-act="verse-language" data-language="ar" aria-label="Arabic original" aria-pressed="${verseLanguage === 'ar'}">Ar</button>
+        </div>
+      </div>
       <div class="verse-emblem" aria-hidden="true">✦</div>
-      <blockquote class="verse-translation">${esc(translation)}</blockquote>
+      <blockquote class="verse-translation" lang="${verseLanguage}" dir="${verseDirection(verseLanguage)}" aria-live="polite">${esc(verse[verseLanguage])}</blockquote>
+      <p class="verse-footnote" lang="ro"${verseLanguage === 'ro' && verse.roFootnote ? '' : ' hidden'}>${esc(verse.roFootnote)}</p>
       <div class="verse-rule" aria-hidden="true"></div>
-      <div class="verse-ref">Surah ${esc(surah)} · ${esc(ref)}</div>
+      <div class="verse-ref">Surah ${esc(verse.surah)} · ${esc(verse.ref)}</div>
+      <div class="verse-source"${verseLanguage === 'ro' ? '' : ' hidden'}><a href="https://quranenc.com/en/browse/romanian_project/${verse.ref.replace(':', '/')}" target="_blank" rel="noopener noreferrer">Islam4ro.com · QuranEnc · v1.0.4</a></div>
     </section>`;
+}
+
+function toggleVerseLanguage(language) {
+  if (language !== 'ro' && language !== 'ar') return;
+  verseLanguage = verseLanguage === language ? 'en' : language;
+  for (const card of document.querySelectorAll('[data-verse-day]')) {
+    const verse = dailyVerse(card.dataset.verseDay);
+    const quote = card.querySelector('.verse-translation');
+    quote.lang = verseLanguage;
+    quote.dir = verseDirection(verseLanguage);
+    quote.textContent = verse[verseLanguage];
+    card.querySelector('.verse-footnote').hidden = verseLanguage !== 'ro' || !verse.roFootnote;
+    card.querySelector('.verse-source').hidden = verseLanguage !== 'ro';
+    for (const button of card.querySelectorAll('[data-language]')) {
+      button.setAttribute('aria-pressed', String(button.dataset.language === verseLanguage));
+    }
+  }
 }
 
 let lastVerseWelcome = null;
@@ -2674,6 +2703,7 @@ function pickScore(button) {
 }
 
 const ACTIONS = {
+  'verse-language': (el) => toggleVerseLanguage(el.dataset.language),
   tab: (el) => go(el.dataset.view),
   'score-pick': (el) => pickScore(el),
   'trend-person': (el) => {

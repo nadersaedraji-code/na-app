@@ -12,7 +12,7 @@ import {
   METHODS, PRAYER_ORDER, CLUJ_TIME_ZONE, dayTimes, suggest, nextPrayer, fmtTime as formatPrayerTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '4.2.3';
+const APP_VERSION = '4.2.4';
 const LOCALE = 'en-GB';
 const FRESH_START_DAY = '2026-11-22';
 const FRESH_START_CUTOFF = Date.parse('2026-11-22T20:15:52Z');
@@ -22,6 +22,7 @@ const COUNTING_START_DAY = '2026-11-23';
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '4.2.4', at: '26 Nov 2026', notes: "Make Romanian and Arabic verses easier to read with dedicated fonts and roomier spacing." },
   { v: '4.2.3', at: '26 Nov 2026', notes: "Read the same daily verse in Romanian or in the Arabic original." },
   { v: '4.2.2', at: '24 Nov 2026', notes: "Use Masjid Cluj-Napoca’s published Mawaqit times without extra offsets, in Cluj local time." },
   { v: '4.2.1', at: '24 Nov 2026', notes: "Combined prayers can be logged and count toward your streak." },

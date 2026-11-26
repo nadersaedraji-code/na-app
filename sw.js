@@ -5,7 +5,7 @@
    User data lives in IndexedDB and is never touched here.
    ============================================================ */
 
-const VERSION = '4.2.3';
+const VERSION = '4.2.4';
 const CACHE = `na-shell-${VERSION}`;
 
 const ASSETS = [
@@ -15,6 +15,8 @@ const ASSETS = [
   './app.js',
   './verses.js',
   './fonts/amiri-quran-arabic.woff2',
+  './fonts/lora-latin.woff2',
+  './fonts/lora-latin-ext.woff2',
   './db.js',
   './sync.js',
   './config.js',

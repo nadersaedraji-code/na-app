@@ -22,8 +22,9 @@ button again to return to English.
 [Talal Itani, ClearQuran](https://www.clearquran.com/) provides the English
 translation (Allah edition, unmodified, [CC BY-ND 4.0](https://creativecommons.org/licenses/by-nd/4.0/)).
 Arabic text and Romanian translation: [QuranEnc.com](https://quranenc.com/en/browse/romanian_project/),
-Romanian translation by Islam4ro.com, version 1.0.4. Arabic type uses
-[Amiri Quran](fonts/amiri-quran-OFL.txt).
+Romanian translation by Islam4ro.com, version 1.0.4. The verse card uses
+[Amiri Quran](fonts/amiri-quran-OFL.txt) for Arabic and [Lora](fonts/lora-OFL.txt)
+for Romanian.
 
 Vanilla JS. No framework, no build step, no dependencies. Data lives in
 IndexedDB on the device; the UI never waits on a network.

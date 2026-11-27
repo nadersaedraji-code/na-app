@@ -12,7 +12,7 @@ import {
   METHODS, PRAYER_ORDER, CLUJ_TIME_ZONE, dayTimes, suggest, nextPrayer, fmtTime as formatPrayerTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '4.3.0';
+const APP_VERSION = '4.3.1';
 const LOCALE = 'en-GB';
 const FRESH_START_DAY = '2026-11-22';
 const FRESH_START_CUTOFF = Date.parse('2026-11-22T20:15:52Z');
@@ -22,6 +22,7 @@ const COUNTING_START_DAY = '2026-11-23';
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '4.3.1', at: '27 Nov 2026', notes: "Bring the daily verse back to the top of Prayer and compare both people side by side in Review." },
   { v: '4.3.0', at: '27 Nov 2026', notes: "See your partner’s prayers, scores and daily history first in a simpler layout." },
   { v: '4.2.4', at: '26 Nov 2026', notes: "Make Romanian and Arabic verses easier to read with dedicated fonts and roomier spacing." },
   { v: '4.2.3', at: '26 Nov 2026', notes: "Read the same daily verse in Romanian or in the Arabic original." },
@@ -1612,6 +1613,7 @@ function viewPrayer() {
        <button class="head-avatar" data-act="open-settings" aria-label="Settings" style="box-shadow:0 0 0 3px ${who.color}30">${who.avatar}</button>
     </header>
 
+    ${verseCard(today)}
     ${partnerCard}
 
     <div class="section-title">${isPreview() ? `${esc(who.name)}’s prayers` : 'Your prayers'}</div>
@@ -1637,8 +1639,7 @@ function viewPrayer() {
     ${dayKey() < statsStart() ? `<div class="notice">Counting begins ${parseDay(statsStart()).toLocaleDateString(LOCALE, { day: 'numeric', month: 'long' })} — today is yours, it just isn't averaged yet.</div>` : ''}
 
     <details class="card secondary-section" data-section="prayer-tools" ${S.openSections.has('prayer-tools') ? 'open' : ''}>
-      <summary>Daily verse, Qibla and more</summary>
-      ${verseCard(today)}
+      <summary>Qibla and prayer history</summary>
       ${qiblaStrip()}
       ${p ? streakPanel(p) : ''}
       <div class="section-title">Last seven days <span class="link">${week.total}/${week.possible}</span></div>
@@ -1862,14 +1863,15 @@ function weeklyRecap(who, partner) {
     </section>`;
 }
 
-function dailyScores(memberId, day) {
-  const review = reviewFor(memberId, day);
-  const score = (value) => displayedScore(value) === null
+const dailyScoreValue = (value) => displayedScore(value) === null
     ? '<b class="score-not-logged">Not logged</b>'
     : `<b class="num">${displayedScore(value)}</b><i>/10</i>`;
+
+function dailyScores(memberId, day) {
+  const review = reviewFor(memberId, day);
   return `<div class="their-scores">
-    <div><span>Satisfaction</span>${score(review?.happiness)}</div>
-    <div><span>Productivity</span>${score(review?.productivity)}</div>
+    <div><span>Satisfaction</span>${dailyScoreValue(review?.happiness)}</div>
+    <div><span>Productivity</span>${dailyScoreValue(review?.productivity)}</div>
   </div>`;
 }
 
@@ -1877,26 +1879,22 @@ function dayHistory(who, partner) {
   const today = dayKey();
   const start = statsStart() > today ? today : statsStart();
   const selected = S.historyDay && S.historyDay >= start && S.historyDay <= today ? S.historyDay : today;
-  const person = (member) => {
-    const editable = member.id === S.viewerId && canEditHistoryDay(selected);
-    const prayers = PRAYER_ORDER.map((key) => {
-      const rec = getPrayer(member.id, selected, key);
-      const state = rec?.status || 'pending';
-      return `<div class="history-prayer">
-        <span>${PMETA[key].name}</span>
-        <span class="pill ${state}"><span class="dot"></span>${STATUS_LABEL[state]}</span>
-        ${rec?.mosque ? `<small>${I.mosque} Mosque</small>` : ''}
-        ${editable ? `<button type="button" class="history-edit" data-act="edit-past-prayer" data-day="${selected}" data-key="${key}" aria-label="Edit ${PMETA[key].name}">Edit</button>` : ''}
-      </div>`;
-    }).join('');
-    return `<div class="history-person">
-      <div class="history-person-name"><span>${esc(member.avatar)}</span>${esc(member.name)}
-        ${editable ? `<button type="button" class="history-edit" data-act="edit-past-review" data-day="${selected}">Edit scores</button>` : ''}
-      </div>
-      ${dailyScores(member.id, selected)}
-      <div class="history-prayers">${prayers}</div>
-    </div>`;
+  const people = partner ? [who, partner] : [who];
+  const editable = (member) => member.id === S.viewerId && canEditHistoryDay(selected);
+  const prayerCell = (member, key) => {
+    const rec = getPrayer(member.id, selected, key);
+    const state = rec?.status || 'pending';
+    const status = `<span class="pill ${state}">${STATUS_LABEL[state]}</span>
+      ${rec?.mosque ? '<small>Mosque</small>' : ''}`;
+    return editable(member)
+      ? `<button type="button" class="history-prayer-edit" data-act="edit-past-prayer" data-day="${selected}" data-key="${key}"
+          aria-label="Edit ${PMETA[key].name}: ${STATUS_LABEL[state]}${rec?.mosque ? ', mosque' : ''}">${status}<span class="history-edit-label" aria-hidden="true">Edit</span></button>`
+      : status;
   };
+  const scoreRows = [['happiness', 'Satisfaction'], ['productivity', 'Productivity']]
+    .map(([field, label]) => `<tr><th scope="row">${label}</th>
+      ${people.map((member) => `<td class="history-score">${dailyScoreValue(reviewFor(member.id, selected)?.[field])}</td>`).join('')}
+    </tr>`).join('');
   return `
     <div class="section-title">A day in full</div>
     <section class="card card-pad day-history" tabindex="-1" aria-label="A day in full">
@@ -1906,11 +1904,14 @@ function dayHistory(who, partner) {
         <button data-act="history-next" aria-label="Next day" ${selected >= today ? 'disabled' : ''}>›</button>
       </div>
       ${partner && !sync.isOn() ? '<p class="compare-note">Pair your phones in Settings to see each other’s entries.</p>' : ''}
-      ${partner ? person(partner) : ''}
-      ${partner ? `<details class="own-history" data-section="own-history" ${S.openSections.has('own-history') ? 'open' : ''}>
-        <summary>${isPreview() ? `${esc(who.name)}’s entries` : 'Your entries'}</summary>
-        ${person(who)}
-      </details>` : person(who)}
+      <table class="history-table" aria-label="Scores and prayers for ${esc(dayLabel(selected))}">
+        <thead><tr><th scope="col">Entry</th>${people.map((member) => `<th scope="col">${esc(member.name)}
+          ${editable(member) ? `<button type="button" class="history-edit" data-act="edit-past-review" data-day="${selected}">Edit scores</button>` : ''}
+        </th>`).join('')}</tr></thead>
+        <tbody>${scoreRows}</tbody>
+        <tbody>${PRAYER_ORDER.map((key) => `<tr><th scope="row">${PMETA[key].name}</th>
+          ${people.map((member) => `<td>${prayerCell(member, key)}</td>`).join('')}</tr>`).join('')}</tbody>
+      </table>
     </section>`;
 }
 
@@ -2712,8 +2713,6 @@ const ACTIONS = {
     }
     requestAnimationFrame(() => {
       const history = $('.day-history');
-      const own = history?.querySelector('.own-history');
-      if (own) own.open = true;
       history?.focus({ preventScroll: true });
       history?.scrollIntoView({ block: 'start' });
     });

@@ -5,7 +5,7 @@
    User data lives in IndexedDB and is never touched here.
    ============================================================ */
 
-const VERSION = '4.3.0';
+const VERSION = '4.3.1';
 const CACHE = `na-shell-${VERSION}`;
 
 const ASSETS = [

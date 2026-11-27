@@ -551,22 +551,26 @@ input:not([type="checkbox"]):not([type="radio"]),textarea{border:0;}
 .history-date button:disabled{opacity:.35;}
 .history-date label{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--ink-3);}
 .history-date input{min-width:0;max-width:158px;padding:8px;border-radius:10px;background:var(--card-flat);color:var(--ink);font-size:13px;}
-.history-person + .history-person{border-top:1px solid var(--line);margin-top:20px;padding-top:20px;}
-.history-person-name{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:650;}
-.history-person-name > span{font-size:20px;}
-.history-prayers{display:grid;gap:6px;}
-.history-prayer{display:flex;align-items:center;gap:7px;min-height:31px;font-size:13px;}
-.history-prayer > span:first-child{flex:1;}
-.history-prayer .pill{font-size:10.5px;padding:5px 8px;}
-.history-prayer small{display:flex;align-items:center;gap:2px;color:var(--gold-ink);font-size:10px;}
-.history-prayer small svg{width:12px;height:12px;}
+.day-history{padding-inline:clamp(12px,4vw,20px);}
+.history-table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:13px;}
+.history-table th,.history-table td{padding:7px 3px;text-align:center;overflow-wrap:anywhere;border-bottom:1px solid var(--line);}
+.history-table th:first-child{width:34%;text-align:left;color:var(--ink-2);}
+.history-table thead th{vertical-align:top;}
+.history-table tbody+tbody{border-top:2px solid var(--line-2);}
+.history-table tbody:last-child tr:last-child>*{border-bottom:0;}
+.history-score .num{font-size:19px;}
+.history-score i{margin-left:3px;color:var(--ink-3);font-size:10px;font-style:normal;}
+.history-score .score-not-logged{color:var(--ink-3);font-size:11px;font-weight:500;}
+.history-table .pill{display:inline-block;max-width:100%;white-space:normal;padding:4px 6px;font-size:11px;}
+.history-table small{display:block;color:var(--ink-2);font-size:10px;margin-top:3px;}
+.history-prayer-edit{width:100%;min-height:44px;border-radius:9px;background:var(--card-flat);}
+.history-edit-label{display:block;color:var(--ink-2);font-size:10px;margin-top:2px;}
 .history-shortcut{margin-top:10px;}
 .secondary-section{padding:14px 16px;margin-top:14px;}
-.secondary-section summary,.own-history summary{cursor:pointer;font-weight:600;color:var(--ink);padding:6px 0;}
+.secondary-section summary{cursor:pointer;font-weight:600;color:var(--ink);padding:6px 0;}
 .secondary-section[open]>summary{margin-bottom:14px;}
-.own-history{margin-top:14px;border-top:1px solid var(--line);padding-top:8px;}
-.history-edit{margin-left:auto;flex:none;min-height:36px;padding:4px 10px;border:1px solid var(--line-2);border-radius:9px;background:var(--card-flat);color:var(--ink);font-size:12px;font-weight:650;}
-.history-edit:focus-visible{outline:2px solid var(--pink);outline-offset:2px;}
+.history-edit{display:block;margin:5px auto 0;min-height:32px;padding:3px 6px;border:1px solid var(--line-2);border-radius:9px;background:var(--card-flat);color:var(--ink);font-size:11px;font-weight:650;}
+.history-edit:focus-visible,.history-prayer-edit:focus-visible{outline:2px solid var(--pink);outline-offset:2px;}
 .weekly-recap{background:linear-gradient(155deg,color-mix(in srgb,var(--gold) 11%,var(--card)),var(--card) 48%);}
 .recap-nav{display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:center;margin-bottom:16px;}
 .recap-nav button{width:37px;height:37px;flex:none;border-radius:12px;background:var(--card-flat);font-size:23px;}

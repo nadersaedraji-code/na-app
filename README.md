@@ -16,7 +16,11 @@ dates without a published entry are labeled as calculated.
 To correct a past entry, select its date under **Review → A day in full**.
 You can edit your own scores and prayers; your partner’s entries are read-only.
 
-The daily Qur’an verse appears on first open each day and on the Prayer tab.
+The Prayer tab opens with your partner’s scores and five prayer statuses for
+today. **View daily history** opens their full record by date in Review.
+
+The daily Qur’an verse appears on first open each day and under **Daily verse,
+Qibla and more** on the Prayer tab.
 Tap **Ro** for Romanian or **Ar** for the Arabic original. Tap the selected
 button again to return to English.
 [Talal Itani, ClearQuran](https://www.clearquran.com/) provides the English

@@ -12,7 +12,7 @@ import {
   METHODS, PRAYER_ORDER, CLUJ_TIME_ZONE, dayTimes, suggest, nextPrayer, fmtTime as formatPrayerTime, fmtCountdown,
 } from './prayertimes.js';
 
-const APP_VERSION = '4.2.4';
+const APP_VERSION = '4.3.0';
 const LOCALE = 'en-GB';
 const FRESH_START_DAY = '2026-11-22';
 const FRESH_START_CUTOFF = Date.parse('2026-11-22T20:15:52Z');
@@ -22,6 +22,7 @@ const COUNTING_START_DAY = '2026-11-23';
    imaginary prayers from an imaginary partner. */
 const SEED_SAMPLE = false;
 const RELEASES = [
+  { v: '4.3.0', at: '27 Nov 2026', notes: "See your partner’s prayers, scores and daily history first in a simpler layout." },
   { v: '4.2.4', at: '26 Nov 2026', notes: "Make Romanian and Arabic verses easier to read with dedicated fonts and roomier spacing." },
   { v: '4.2.3', at: '26 Nov 2026', notes: "Read the same daily verse in Romanian or in the Arabic original." },
   { v: '4.2.2', at: '24 Nov 2026', notes: "Use Masjid Cluj-Napoca’s published Mawaqit times without extra offsets, in Cluj local time." },
@@ -242,6 +243,7 @@ const S = {
   recapMember: 'mine',
   recapWeek: null,
   reviewDraft: null,
+  openSections: new Set(),
   planTab: 'mine',
   goalTab: 'mine',
   calMonth: null,
@@ -971,6 +973,10 @@ window.addEventListener('resize', positionTabPill);
 function render() {
   if (!S.members.length) return;
   const scr = $('#screen');
+  for (const section of scr.querySelectorAll('details[data-section]')) {
+    if (section.open) S.openSections.add(section.dataset.section);
+    else S.openSections.delete(section.dataset.section);
+  }
   const banner = isPreview()
     ? `<div style="display:flex;justify-content:center;padding:6px 0 2px"><button class="preview-bar" data-act="exit-preview">Previewing as ${esc(actor()?.name)} · tap to exit</button></div>`
     : '';
@@ -1545,38 +1551,8 @@ function viewPrayer() {
   const p = other(who);
   const today = dayKey();
   const t = times(today);
-  const recs = PRAYER_ORDER.map((k) => ({ k, rec: getPrayer(who.id, today, k) }));
-  const onTime = recs.filter((x) => x.rec && x.rec.status !== 'missed').length;
   const np = nextPrayer(t);
-  const streak = streakOf(who.id);
   const soon = closingSoon(who.id);
-  const excused = isExcused(who.id, today);
-  const C = 2 * Math.PI * 52;
-
-  const capAngle = -Math.PI / 2 + (onTime / 5) * Math.PI * 2;
-  const capX = 64 + Math.cos(capAngle) * 52;
-  const capY = 64 + Math.sin(capAngle) * 52;
-
-  const ring = `
-    <div class="ring-wrap">
-      <svg class="ring" viewBox="0 0 128 128" aria-hidden="true">
-        <defs>
-          <linearGradient id="naRingGrad" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" style="stop-color:var(--accent)"></stop>
-            <stop offset="1" style="stop-color:var(--pink)"></stop>
-          </linearGradient>
-        </defs>
-        <circle class="bg" cx="64" cy="64" r="52"></circle>
-        <circle class="fg" cx="64" cy="64" r="52"
-          stroke-dasharray="${C.toFixed(1)}"
-          stroke-dashoffset="${(C * (1 - onTime / 5)).toFixed(1)}"></circle>
-        ${onTime > 0 ? `<circle class="cap" cx="${capX.toFixed(1)}" cy="${capY.toFixed(1)}" r="4.4"></circle>` : ''}
-      </svg>
-      <div class="ring-label">
-        <div class="big num">${onTime}<span style="color:var(--ink-3);font-size:18px">/5</span></div>
-        <div class="small">prayers</div>
-      </div>
-    </div>`;
 
   const rows = PRAYER_ORDER.map((k) => {
     const rec = getPrayer(who.id, today, k);
@@ -1599,10 +1575,11 @@ function viewPrayer() {
       <div class="who">
         <span class="avatar" style="box-shadow:0 0 0 2px ${p.color}44">${p.avatar}</span>
         <span>
-          <span class="name">${esc(p.name)}</span>
-           <span class="count num">${validPrayerCount(p.id, today)} of 5 valid · today</span>
+          <h2 class="name">${esc(p.name)} today</h2>
+          <span class="count num">${validPrayerCount(p.id, today)} of 5 count toward the streak</span>
         </span>
       </div>
+      ${dailyScores(p.id, today)}
       <div class="partner-prayers">
         ${PRAYER_ORDER.map((k) => {
           const r = getPrayer(p.id, today, k);
@@ -1617,10 +1594,11 @@ function viewPrayer() {
           </button>`;
         }).join('')}
       </div>
+      <button class="btn ghost wide partner-history" type="button" data-act="streak-day" data-day="${today}">View daily history</button>
     </div>` : `
     <div class="card card-pad" style="text-align:center">
       <div style="font-size:15px;font-weight:600;margin-bottom:4px">Room for one more</div>
-      <div style="font-size:13.5px;color:var(--ink-3);line-height:1.55">Invite them in Settings and their five prayers will appear here, live.</div>
+      <div style="font-size:13.5px;color:var(--ink-3);line-height:1.55">Pair your phones in Settings to see your partner’s prayers and scores here.</div>
     </div>`;
 
   const week = lastSeven(who.id);
@@ -1634,21 +1612,21 @@ function viewPrayer() {
        <button class="head-avatar" data-act="open-settings" aria-label="Settings" style="box-shadow:0 0 0 3px ${who.color}30">${who.avatar}</button>
     </header>
 
-    ${verseCard(today)}
+    ${partnerCard}
+
+    <div class="section-title">${isPreview() ? `${esc(who.name)}’s prayers` : 'Your prayers'}</div>
 
     ${soon ? `<button class="urgent" data-act="log" data-key="${soon.k}">
       <span class="dot"></span>
       <span>${PMETA[soon.k].name} ends in ${soon.mins} min — not logged yet</span>
     </button>` : ''}
 
-    <div class="card hero">
-      ${ring}
+    <div class="card prayer-next">
       <div class="hero-copy">
         ${clujSelected() ? `<div class="next-meta">${(np.tomorrow ? t.nextFajrSource : t.source) === 'mawaqit' ? 'Mawaqit · Cluj local time' : 'Calculated · Cluj local time'}</div>` : ''}
         <div class="next-label">${np.tomorrow ? 'Tomorrow' : 'Next'}</div>
         <div class="next-name">${PMETA[np.key].name} <span class="num" style="color:var(--ink-2);font-size:17px;font-weight:500">${fmtTime(np.at)}</span></div>
         <div class="next-meta num">in <b>${fmtCountdown(np.at - new Date())}</b>${np.tomorrow ? ' · new day' : ''}</div>
-        ${streak.current ? `<div class="hero-streak">${flameSvg(13)} ${streak.current}-day streak</div>` : ''}
       </div>
     </div>
 
@@ -1656,18 +1634,16 @@ function viewPrayer() {
     <div class="section-title">Your streak</div>
     ${streakPanel(who)}
 
-    ${qiblaStrip()}
-
     ${dayKey() < statsStart() ? `<div class="notice">Counting begins ${parseDay(statsStart()).toLocaleDateString(LOCALE, { day: 'numeric', month: 'long' })} — today is yours, it just isn't averaged yet.</div>` : ''}
 
-    <div class="section-title">${p ? 'Side by side' : 'Your partner'}</div>
-    ${partnerCard}
-    ${p ? streakPanel(p) : ''}
-
-    <div class="section-title">Last seven days <span class="link">${week.total}/${week.possible}</span></div>
-    <div class="card card-pad">
-      ${week.html}
-    </div>
+    <details class="card secondary-section" data-section="prayer-tools" ${S.openSections.has('prayer-tools') ? 'open' : ''}>
+      <summary>Daily verse, Qibla and more</summary>
+      ${verseCard(today)}
+      ${qiblaStrip()}
+      ${p ? streakPanel(p) : ''}
+      <div class="section-title">Last seven days <span class="link">${week.total}/${week.possible}</span></div>
+      <div class="card card-pad">${week.html}</div>
+    </details>
   `;
 }
 
@@ -1700,47 +1676,24 @@ function viewReview() {
   const p = other(who);
   const today = dayKey();
   const mine = reviewFor(who.id, today);
-  const theirs = p ? reviewFor(p.id, today) : null;
   const saved = !!mine;
   const draft = S.reviewDraft?.memberId === who.id && S.reviewDraft?.day === today
     ? S.reviewDraft : null;
-
-  const metric = (label, a, b) => `
-    <div class="metric">
-      <span class="lab">${label}</span>
-      <b class="num">${displayedScore(a) ?? '–'}<small>/10</small></b>
-      <b class="num">${displayedScore(b) ?? '–'}<small>/10</small></b>
-    </div>`;
-
-  const compare = p ? `
-    <div class="card compare">
-      <div class="compare-title">Today’s scores · ${esc(who.name)} &amp; ${esc(p.name)}</div>
-      <div class="compare-head">
-        <span></span>
-        <span class="you">${esc(who.name)}</span>
-        <span class="them">${esc(p.name)}</span>
-      </div>
-       ${metric('Satisfaction', mine?.happiness, theirs?.happiness)}
-       ${metric('Productivity', mine?.productivity, theirs?.productivity)}
-       ${!sync.isOn() ? '<p class="compare-note">Pair your phones in Settings to see each other’s scores.</p>'
-         : !theirs ? `<p class="compare-note">${esc(p.name)} hasn’t saved a score for today yet. Past days are below.</p>` : ''}
-    </div>
-    <div style="height:14px"></div>` : '';
 
   return `
     <header class="head">
       <div>
         <div class="eyebrow">${parseDay(today).toLocaleDateString(LOCALE, { weekday: 'long', day: 'numeric', month: 'long' })}</div>
-        <h1>How was today?</h1>
-         <div class="sub">Rate your satisfaction and productivity out of 10.</div>
+         <h1>Review</h1>
        </div>
        <button class="icon-btn" data-act="open-settings" aria-label="Settings">${I.sliders}</button>
     </header>
 
-    ${compare}
+    ${dayHistory(who, p)}
 
     ${!isPreview() ? '<button class="btn ghost wide history-shortcut" type="button" data-act="edit-history">Edit past entries</button>' : ''}
 
+    <div class="section-title">Your scores today</div>
     <form class="review-form" data-form="save-review">
        ${reviewControls(mine, draft)}
       <div class="card card-pad">
@@ -1749,9 +1702,11 @@ function viewReview() {
       </div>
     </form>
 
-    ${gradeTrend(who, p)}
-    ${weeklyRecap(who, p)}
-    ${dayHistory(who, p)}
+    <details class="card secondary-section" data-section="review-stats" ${S.openSections.has('review-stats') ? 'open' : ''}>
+      <summary>Score trends and weekly recap</summary>
+      ${gradeTrend(who, p)}
+      ${weeklyRecap(who, p)}
+    </details>
   `;
 }
 
@@ -1907,13 +1862,23 @@ function weeklyRecap(who, partner) {
     </section>`;
 }
 
+function dailyScores(memberId, day) {
+  const review = reviewFor(memberId, day);
+  const score = (value) => displayedScore(value) === null
+    ? '<b class="score-not-logged">Not logged</b>'
+    : `<b class="num">${displayedScore(value)}</b><i>/10</i>`;
+  return `<div class="their-scores">
+    <div><span>Satisfaction</span>${score(review?.happiness)}</div>
+    <div><span>Productivity</span>${score(review?.productivity)}</div>
+  </div>`;
+}
+
 function dayHistory(who, partner) {
   const today = dayKey();
   const start = statsStart() > today ? today : statsStart();
   const selected = S.historyDay && S.historyDay >= start && S.historyDay <= today ? S.historyDay : today;
   const person = (member) => {
     const editable = member.id === S.viewerId && canEditHistoryDay(selected);
-    const review = reviewFor(member.id, selected);
     const prayers = PRAYER_ORDER.map((key) => {
       const rec = getPrayer(member.id, selected, key);
       const state = rec?.status || 'pending';
@@ -1928,10 +1893,7 @@ function dayHistory(who, partner) {
       <div class="history-person-name"><span>${esc(member.avatar)}</span>${esc(member.name)}
         ${editable ? `<button type="button" class="history-edit" data-act="edit-past-review" data-day="${selected}">Edit scores</button>` : ''}
       </div>
-      <div class="their-scores">
-        <div><span>Satisfaction</span><b class="num">${displayedScore(review?.happiness) ?? '–'}</b><i>/10</i></div>
-        <div><span>Productivity</span><b class="num">${displayedScore(review?.productivity) ?? '–'}</b><i>/10</i></div>
-      </div>
+      ${dailyScores(member.id, selected)}
       <div class="history-prayers">${prayers}</div>
     </div>`;
   };
@@ -1943,9 +1905,12 @@ function dayHistory(who, partner) {
         <label for="history-day">Day <input id="history-day" type="date" min="${start}" max="${today}" value="${selected}"></label>
         <button data-act="history-next" aria-label="Next day" ${selected >= today ? 'disabled' : ''}>›</button>
       </div>
-      <p class="compare-note">${isPreview() ? 'Exit preview to edit your own entries.' : 'Choose a date, then use the Edit buttons by your name and prayers.'}</p>
-      ${person(who)}
+      ${partner && !sync.isOn() ? '<p class="compare-note">Pair your phones in Settings to see each other’s entries.</p>' : ''}
       ${partner ? person(partner) : ''}
+      ${partner ? `<details class="own-history" data-section="own-history" ${S.openSections.has('own-history') ? 'open' : ''}>
+        <summary>${isPreview() ? `${esc(who.name)}’s entries` : 'Your entries'}</summary>
+        ${person(who)}
+      </details>` : person(who)}
     </section>`;
 }
 
@@ -2723,7 +2688,11 @@ const ACTIONS = {
     S.historyDay = el.dataset.day;
     if (S.view === 'review') refresh();
     else go('review');
-    requestAnimationFrame(() => document.querySelector('.day-history')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    requestAnimationFrame(() => {
+      const history = $('.day-history');
+      history?.focus({ preventScroll: true });
+      history?.scrollIntoView({ block: 'start' });
+    });
   },
   'history-prev': () => {
     const current = S.historyDay || dayKey();
@@ -2743,6 +2712,8 @@ const ACTIONS = {
     }
     requestAnimationFrame(() => {
       const history = $('.day-history');
+      const own = history?.querySelector('.own-history');
+      if (own) own.open = true;
       history?.focus({ preventScroll: true });
       history?.scrollIntoView({ block: 'start' });
     });
